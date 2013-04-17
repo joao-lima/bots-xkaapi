@@ -31,13 +31,9 @@ function run_test {
 
 #    execfile="./strassen.gcc.kaapi"
     execfile="./sparselu.gcc.kaapi"
-    msizes="2048"
-    bsizes="512"
-    niter=1
-#    verif=1
     export KAAPI_CUDA_WINDOW_SIZE=2
 #   KAAPI_STACKSIZE_MASTER=536870912 gdb $execfile
-    KAAPI_STACKSIZE_MASTER=536870912 $execfile -n 128 -m 64 
+    KAAPI_STACKSIZE_MASTER=536870912 $execfile -n 25 -m 25
 }
 
 run_test

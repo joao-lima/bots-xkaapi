@@ -293,7 +293,7 @@ void fwd_cuda(float *diag, float *col)
   cublasStatus_t res;
   float alpha = -1.0f;
   float beta = 1.0f;
-#if 1
+#if 0
   fprintf(stdout, "TaskGPU FWD diag=%p col=%p\n", (void*)diag, (void*)col);
   fflush(stdout);
 #endif
@@ -318,7 +318,7 @@ void bmod_cuda(float *row, float *col, float *inner)
   cublasStatus_t res;
   float alpha = -1.0f;
   float beta = 1.0f;
-#if 1
+#if 0
   fprintf(stdout, "TaskGPU BMOD row=%p col=%p inner=%p\n", (void*)row, (void*)col, (void*)inner);
   fflush(stdout);
 #endif  
