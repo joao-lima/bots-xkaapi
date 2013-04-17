@@ -415,8 +415,11 @@ void sparselu_par_call(float **BENCH)
 
 #if defined(BOTS_KAAPI)
   kaapic_begin_parallel( KAAPIC_FLAG_STATIC_SCHED );
+#else
+#pragma omp parallel
+#pragma omp single nowait
+#pragma omp task untied
 #endif
-
   for (kk=0; kk<bots_arg_size; kk++)
   {
 #if defined(BOTS_KAAPI)
