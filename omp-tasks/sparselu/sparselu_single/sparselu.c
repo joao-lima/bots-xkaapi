@@ -30,12 +30,14 @@
 #if defined(BOTS_KAAPI)
 #include "kaapic.h"
 
-#include <cblas.h>
-
 #include <cuda_runtime_api.h>
 #include "cublas_v2.h"
 
 extern cublasHandle_t kaapi_cuda_cublas_handle( void );
+#endif
+
+#if defined(BOTS_CBLAS)
+#include <cblas.h>
 #endif
 
 #define   __COL_MAJOR
@@ -239,7 +241,7 @@ void bdiv(float *diag, float *row)
  **********************************************************************/
 void bmod(float *row, float *col, float *inner)
 {
-#if defined(BOTS_KAAPI)
+#if defined(BOTS_CBLAS)
   cblas_sgemm(
 #if defined(__COL_MAJOR)
               CblasColMajor,
@@ -265,7 +267,7 @@ void bmod(float *row, float *col, float *inner)
  **********************************************************************/
 void fwd(float *diag, float *col)
 {
-#if defined(BOTS_KAAPI)
+#if defined(BOTS_CBLAS)
   cblas_sgemm(
 #if defined(__COL_MAJOR)
               CblasColMajor,
