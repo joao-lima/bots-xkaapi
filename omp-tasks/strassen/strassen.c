@@ -1523,7 +1523,7 @@ void strassen_main_seq(REAL *A, REAL *B, REAL *C, int n)
 void strassen_init (void)
 {
 #if defined(BOTS_KAAPI)
-  kaapic_init( KAAPIC_START_ONLY_MAIN );
+  kaapic_init( 0 );
 #endif
 }
 
