@@ -354,24 +354,24 @@ void cilkmerge_par(ELM *low1, ELM *high1, ELM *low2, ELM *high2, ELM *lowdest)
   kaapic_spawn(0,
                5, cilkmerge_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)low1,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(split1-1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, low1,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (split1-1),
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)low2,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)split2,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, low2,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, split2,
                /**/
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)lowdest
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, lowdest
                );
   kaapic_spawn(0,
                5, cilkmerge_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(split1+1),
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)high1,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (split1+1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, high1,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(split2+1),
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)high2,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (split2+1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, high2,
                /**/
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(lowdest + lowsize + 2)
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (lowdest + lowsize + 2)
                );  
   kaapic_sync();
 #else
@@ -416,9 +416,9 @@ void cilksort_par(ELM *low, ELM *tmp, long size)
   kaapic_spawn(0,
                3, cilksort_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)A,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, A,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpA,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpA,
                /**/
                KAAPIC_MODE_V, KAAPIC_TYPE_LONG, 1, (long)quarter
                );
@@ -426,9 +426,9 @@ void cilksort_par(ELM *low, ELM *tmp, long size)
   kaapic_spawn(0,
                3, cilksort_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)B,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, B,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpB,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpB,
                /**/
                KAAPIC_MODE_V, KAAPIC_TYPE_LONG, 1, (long)quarter
                );
@@ -436,9 +436,9 @@ void cilksort_par(ELM *low, ELM *tmp, long size)
   kaapic_spawn(0,
                3, cilksort_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)C,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, C,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpC,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpC,
                /**/
                KAAPIC_MODE_V, KAAPIC_TYPE_LONG, 1, (long)quarter
                );  
@@ -446,9 +446,9 @@ void cilksort_par(ELM *low, ELM *tmp, long size)
   kaapic_spawn(0,
                3, cilksort_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)D,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, D,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpD,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpD,
                /**/
                KAAPIC_MODE_V, KAAPIC_TYPE_LONG, 1, (long)(size - 3 * quarter)
                );  
@@ -469,24 +469,24 @@ void cilksort_par(ELM *low, ELM *tmp, long size)
   kaapic_spawn(0,
                5, cilkmerge_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)A,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(A + quarter - 1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, A,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (A + quarter - 1),
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)B,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(B + quarter - 1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, B,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (B + quarter - 1),
                /**/
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpA
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpA
                );
   kaapic_spawn(0,
                5, cilkmerge_par,
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)C,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(C + quarter - 1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, C,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (C + quarter - 1),
                /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)D,
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)(low + size - 1),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, D,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (low + size - 1),
                /**/
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmpC
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmpC
                );  
   kaapic_sync();
 #else
@@ -569,16 +569,16 @@ void sort_par ( void )
 	bots_message("Computing multisort algorithm (n=%d) ", bots_arg_size);
 
 #if defined(BOTS_KAAPI)
-  kaapic_begin_parallel( KAAPI_SCHEDFLAG_DEFAULT );
+  kaapic_begin_parallel( KAAPIC_FLAG_DEFAULT );
 #endif  
   
 #if defined(BOTS_KAAPI)
   kaapic_spawn(0,
                3, cilksort_par,
-               /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)array,
-               /* */
-               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (uintptr_t)tmp,
+               /**/
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, array,
+               /**/
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, tmp,
                /**/
                KAAPIC_MODE_V, KAAPIC_TYPE_LONG, 1, (long)bots_arg_size
                );  
@@ -592,7 +592,7 @@ void sort_par ( void )
 	bots_message(" completed!\n");
   
 #if defined(BOTS_KAAPI)
-  kaapic_end_parallel( KAAPI_SCHEDFLAG_DEFAULT );
+  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );
 #endif  
 }
 

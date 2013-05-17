@@ -18,8 +18,8 @@
 /*  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA            */
 /**********************************************************************************************/
 
-/* 
- * Original code from the Cilk project 
+/*
+ * Original code from the Cilk project
  *
  * Copyright (c) 2000 Massachusetts Institute of Technology
  * Copyright (c) 2000 Matteo Frigo
@@ -44,48 +44,73 @@
  */
 void compute_w_coefficients(int n, int a, int b, COMPLEX * W)
 {
-     register double twoPiOverN;
-     register int k;
-     register REAL s, c;
-
-     if (b - a < 128) {
+  register double twoPiOverN;
+  register int k;
+  register REAL s, c;
+  
+  if (b - a < 128) {
 	  twoPiOverN = 2.0 * 3.1415926535897932384626434 / n;
 	  for (k = a; k <= b; ++k) {
-	       c = cos(twoPiOverN * k);
-	       c_re(W[k]) = c_re(W[n - k]) = c;
-	       s = sin(twoPiOverN * k);
-	       c_im(W[k]) = -s;
-	       c_im(W[n - k]) = s;
+      c = cos(twoPiOverN * k);
+      c_re(W[k]) = c_re(W[n - k]) = c;
+      s = sin(twoPiOverN * k);
+      c_im(W[k]) = -s;
+      c_im(W[n - k]) = s;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 4, compute_w_coefficients,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W
+                 );
+#else
+#pragma omp task untied
 	  compute_w_coefficients(n, a, ab, W);
-          #pragma omp task untied
+#endif
+
+#if 0
+    kaapic_spawn(0, 4, compute_w_coefficients,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab + 1,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W
+                 );
+#else
+#pragma omp task untied
 	  compute_w_coefficients(n, ab + 1, b, W);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
+
 void compute_w_coefficients_seq(int n, int a, int b, COMPLEX * W)
 {
-     register double twoPiOverN;
-     register int k;
-     register REAL s, c;
-
-     if (b - a < 128) {
+  register double twoPiOverN;
+  register int k;
+  register REAL s, c;
+  
+  if (b - a < 128) {
 	  twoPiOverN = 2.0 * 3.1415926535897932384626434 / n;
 	  for (k = a; k <= b; ++k) {
-	       c = cos(twoPiOverN * k);
-	       c_re(W[k]) = c_re(W[n - k]) = c;
-	       s = sin(twoPiOverN * k);
-	       c_im(W[k]) = -s;
-	       c_im(W[n - k]) = s;
+      c = cos(twoPiOverN * k);
+      c_re(W[k]) = c_re(W[n - k]) = c;
+      s = sin(twoPiOverN * k);
+      c_im(W[k]) = -s;
+      c_im(W[n - k]) = s;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  compute_w_coefficients_seq(n, a, ab, W);
 	  compute_w_coefficients_seq(n, ab + 1, b, W);
-     }
+  }
 }
 /*
  * Determine (in a stupid way) if n is divisible by eight, then by four, else
@@ -93,171 +118,249 @@ void compute_w_coefficients_seq(int n, int a, int b, COMPLEX * W)
  */
 int factor(int n)
 {
-     int r;
-
-     if (n < 2) return 1;
-     if (n == 64 || n == 128 || n == 256 || n == 1024 || n == 2048 || n == 4096) return 8;
-     if ((n & 15) == 0) return 16;
-     if ((n & 7) == 0) return 8;
-     if ((n & 3) == 0) return 4;
-     if ((n & 1) == 0) return 2;
-
-     /* try odd numbers up to n (computing the sqrt may be slower) */
-     for (r = 3; r < n; r += 2) if (n % r == 0) return r;
-
-     /* n is prime */
-     return n;
+  int r;
+  
+  if (n < 2) return 1;
+  if (n == 64 || n == 128 || n == 256 || n == 1024 || n == 2048 || n == 4096) return 8;
+  if ((n & 15) == 0) return 16;
+  if ((n & 7) == 0) return 8;
+  if ((n & 3) == 0) return 4;
+  if ((n & 1) == 0) return 2;
+  
+  /* try odd numbers up to n (computing the sqrt may be slower) */
+  for (r = 3; r < n; r += 2) if (n % r == 0) return r;
+  
+  /* n is prime */
+  return n;
 }
 
 void unshuffle(int a, int b, COMPLEX * in, COMPLEX * out, int r, int m)
 {
-     int i, j;
-     int r4 = r & (~0x3);
-     const COMPLEX *ip;
-     COMPLEX *jp;
-
-     if (b - a < 16) {
+  int i, j;
+  int r4 = r & (~0x3);
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  
+  if (b - a < 16) {
 	  ip = in + a * r;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       for (j = 0; j < r4; j += 4) {
+      jp = out + i;
+      for (j = 0; j < r4; j += 4) {
 		    jp[0] = ip[0];
 		    jp[m] = ip[1];
 		    jp[2 * m] = ip[2];
 		    jp[3 * m] = ip[3];
 		    jp += 4 * m;
 		    ip += 4;
-	       }
-	       for (; j < r; ++j) {
+      }
+      for (; j < r; ++j) {
 		    *jp = *ip;
 		    ip++;
 		    jp += m;
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 6, unshuffle,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  unshuffle(a, ab, in, out, r, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 6, unshuffle,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  unshuffle(ab, b, in, out, r, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
+
 void unshuffle_seq(int a, int b, COMPLEX * in, COMPLEX * out, int r, int m)
 {
-     int i, j;
-     int r4 = r & (~0x3);
-     const COMPLEX *ip;
-     COMPLEX *jp;
-
-     if (b - a < 16) {
+  int i, j;
+  int r4 = r & (~0x3);
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  
+  if (b - a < 16) {
 	  ip = in + a * r;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       for (j = 0; j < r4; j += 4) {
+      jp = out + i;
+      for (j = 0; j < r4; j += 4) {
 		    jp[0] = ip[0];
 		    jp[m] = ip[1];
 		    jp[2 * m] = ip[2];
 		    jp[3 * m] = ip[3];
 		    jp += 4 * m;
 		    ip += 4;
-	       }
-	       for (; j < r; ++j) {
+      }
+      for (; j < r; ++j) {
 		    *jp = *ip;
 		    ip++;
 		    jp += m;
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  unshuffle_seq(a, ab, in, out, r, m);
 	  unshuffle_seq(ab, b, in, out, r, m);
-     }
+  }
 }
 void fft_twiddle_gen1(COMPLEX * in, COMPLEX * out,
-				  COMPLEX * W, int r, int m,
-				  int nW, int nWdnti, int nWdntm)
+                      COMPLEX * W, int r, int m,
+                      int nW, int nWdnti, int nWdntm)
 {
-     int j, k;
-     COMPLEX *jp, *kp;
-
-     for (k = 0, kp = out; k < r; ++k, kp += m) {
+  int j, k;
+  COMPLEX *jp, *kp;
+  
+  for (k = 0, kp = out; k < r; ++k, kp += m) {
 	  REAL r0, i0, rt, it, rw, iw;
 	  int l1 = nWdnti + nWdntm * k;
 	  int l0;
-
+    
 	  r0 = i0 = 0.0;
 	  for (j = 0, jp = in, l0 = 0; j < r; ++j, jp += m) {
-	       rw = c_re(W[l0]);
-	       iw = c_im(W[l0]);
-	       rt = c_re(*jp);
-	       it = c_im(*jp);
-	       r0 += rt * rw - it * iw;
-	       i0 += rt * iw + it * rw;
-	       l0 += l1;
-	       if (l0 > nW)
+      rw = c_re(W[l0]);
+      iw = c_im(W[l0]);
+      rt = c_re(*jp);
+      it = c_im(*jp);
+      r0 += rt * rw - it * iw;
+      i0 += rt * iw + it * rw;
+      l0 += l1;
+      if (l0 > nW)
 		    l0 -= nW;
 	  }
 	  c_re(*kp) = r0;
 	  c_im(*kp) = i0;
-     }
+  }
 }
 
 void fft_twiddle_gen(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int r, int m)
 {
-     if (i == i1 - 1) {
-          #pragma omp task untied
+  if (i == i1 - 1) {
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_gen1,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in+i,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out+i,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn * i,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn * m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_gen1(in + i, out + i, W,
-				 r, m, nW, nWdn * i, nWdn * m);
-     } else {
+                     r, m, nW, nWdn * i, nWdn * m);
+#endif
+  } else {
 	  int i2 = (i + i1) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 9, fft_twiddle_gen,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_gen(i, i2, in, out, W, nW,
-				nWdn, r, m);
-          #pragma omp task untied
+                    nWdn, r, m);
+#endif
+    
+#if 0
+    kaapic_spawn(0, 9, fft_twiddle_gen,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i1,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_gen(i2, i1, in, out, W, nW,
-				nWdn, r, m);
-     }
-     #pragma omp taskwait
+                    nWdn, r, m);
+#endif
+  }
+  
+#if 0
+  kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
 }
+
 void fft_twiddle_gen_seq(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W,
                          int nW, int nWdn, int r, int m)
 {
-     if (i == i1 - 1) {
+  if (i == i1 - 1) {
 	  fft_twiddle_gen1(in + i, out + i, W,
-				 r, m, nW, nWdn * i, nWdn * m);
-     } else {
+                     r, m, nW, nWdn * i, nWdn * m);
+  } else {
 	  int i2 = (i + i1) / 2;
 	  fft_twiddle_gen_seq(i, i2, in, out, W, nW,
-				nWdn, r, m);
+                        nWdn, r, m);
 	  fft_twiddle_gen_seq(i2, i1, in, out, W, nW,
-				nWdn, r, m);
-     }
+                        nWdn, r, m);
+  }
 }
+
 /* machine-generated code begins here */
 void fft_base_2(COMPLEX * in, COMPLEX * out)
 {
-     REAL r1_0, i1_0;
-     REAL r1_1, i1_1;
-     r1_0 = c_re(in[0]);
-     i1_0 = c_im(in[0]);
-     r1_1 = c_re(in[1]);
-     i1_1 = c_im(in[1]);
-     c_re(out[0]) = (r1_0 + r1_1);
-     c_im(out[0]) = (i1_0 + i1_1);
-     c_re(out[1]) = (r1_0 - r1_1);
-     c_im(out[1]) = (i1_0 - i1_1);
+  REAL r1_0, i1_0;
+  REAL r1_1, i1_1;
+  r1_0 = c_re(in[0]);
+  i1_0 = c_im(in[0]);
+  r1_1 = c_re(in[1]);
+  i1_1 = c_im(in[1]);
+  c_re(out[0]) = (r1_0 + r1_1);
+  c_im(out[0]) = (i1_0 + i1_1);
+  c_re(out[1]) = (r1_0 - r1_1);
+  c_im(out[1]) = (i1_0 - i1_1);
 }
 void fft_twiddle_2(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    r1_0 = c_re(jp[0 * m]);
@@ -272,27 +375,60 @@ void fft_twiddle_2(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
 		    c_re(kp[1 * m]) = (r1_0 - r1_1);
 		    c_im(kp[1 * m]) = (i1_0 - i1_1);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_2(a, ab, in, out, W, nW, nWdn, m);
-          #pragma omp task untied
+#endif
+
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_2(ab, b, in, out, W, nW, nWdn, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
+
 void fft_twiddle_2_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    r1_0 = c_re(jp[0 * m]);
@@ -307,62 +443,89 @@ void fft_twiddle_2_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
 		    c_re(kp[1 * m]) = (r1_0 - r1_1);
 		    c_im(kp[1 * m]) = (i1_0 - i1_1);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_twiddle_2_seq(a, ab, in, out, W, nW, nWdn, m);
 	  fft_twiddle_2_seq(ab, b, in, out, W, nW, nWdn, m);
-     }
+  }
 }
 void fft_unshuffle_2(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 2;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_2(a, ab, in, out, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_2(ab, b, in, out, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_unshuffle_2_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 2;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_unshuffle_2_seq(a, ab, in, out, m);
 	  fft_unshuffle_2_seq(ab, b, in, out, m);
-     }
+  }
 }
 void fft_base_4(COMPLEX * in, COMPLEX * out)
 {
-     REAL r1_0, i1_0;
-     REAL r1_1, i1_1;
-     REAL r1_2, i1_2;
-     REAL r1_3, i1_3;
-     {
+  REAL r1_0, i1_0;
+  REAL r1_1, i1_1;
+  REAL r1_2, i1_2;
+  REAL r1_3, i1_3;
+  {
 	  REAL r2_0, i2_0;
 	  REAL r2_2, i2_2;
 	  r2_0 = c_re(in[0]);
@@ -373,8 +536,8 @@ void fft_base_4(COMPLEX * in, COMPLEX * out)
 	  i1_0 = (i2_0 + i2_2);
 	  r1_2 = (r2_0 - r2_2);
 	  i1_2 = (i2_0 - i2_2);
-     }
-     {
+  }
+  {
 	  REAL r2_1, i2_1;
 	  REAL r2_3, i2_3;
 	  r2_1 = c_re(in[1]);
@@ -385,65 +548,65 @@ void fft_base_4(COMPLEX * in, COMPLEX * out)
 	  i1_1 = (i2_1 + i2_3);
 	  r1_3 = (r2_1 - r2_3);
 	  i1_3 = (i2_1 - i2_3);
-     }
-     c_re(out[0]) = (r1_0 + r1_1);
-     c_im(out[0]) = (i1_0 + i1_1);
-     c_re(out[2]) = (r1_0 - r1_1);
-     c_im(out[2]) = (i1_0 - i1_1);
-     c_re(out[1]) = (r1_2 + i1_3);
-     c_im(out[1]) = (i1_2 - r1_3);
-     c_re(out[3]) = (r1_2 - i1_3);
-     c_im(out[3]) = (i1_2 + r1_3);
+  }
+  c_re(out[0]) = (r1_0 + r1_1);
+  c_im(out[0]) = (i1_0 + i1_1);
+  c_re(out[2]) = (r1_0 - r1_1);
+  c_im(out[2]) = (i1_0 - i1_1);
+  c_re(out[1]) = (r1_2 + i1_3);
+  c_im(out[1]) = (i1_2 - r1_3);
+  c_re(out[3]) = (r1_2 - i1_3);
+  c_im(out[3]) = (i1_2 + r1_3);
 }
 void fft_twiddle_4(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
 		    REAL r1_3, i1_3;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 r2_0 = c_re(jp[0 * m]);
-			 i2_0 = c_im(jp[0 * m]);
-			 wr = c_re(W[2 * l1]);
-			 wi = c_im(W[2 * l1]);
-			 tmpr = c_re(jp[2 * m]);
-			 tmpi = c_im(jp[2 * m]);
-			 r2_2 = ((wr * tmpr) - (wi * tmpi));
-			 i2_2 = ((wi * tmpr) + (wr * tmpi));
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_2 = (r2_0 - r2_2);
-			 i1_2 = (i2_0 - i2_2);
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          r2_0 = c_re(jp[0 * m]);
+          i2_0 = c_im(jp[0 * m]);
+          wr = c_re(W[2 * l1]);
+          wi = c_im(W[2 * l1]);
+          tmpr = c_re(jp[2 * m]);
+          tmpi = c_im(jp[2 * m]);
+          r2_2 = ((wr * tmpr) - (wi * tmpi));
+          i2_2 = ((wi * tmpr) + (wr * tmpi));
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_2 = (r2_0 - r2_2);
+          i1_2 = (i2_0 - i2_2);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 wr = c_re(W[1 * l1]);
-			 wi = c_im(W[1 * l1]);
-			 tmpr = c_re(jp[1 * m]);
-			 tmpi = c_im(jp[1 * m]);
-			 r2_1 = ((wr * tmpr) - (wi * tmpi));
-			 i2_1 = ((wi * tmpr) + (wr * tmpi));
-			 wr = c_re(W[3 * l1]);
-			 wi = c_im(W[3 * l1]);
-			 tmpr = c_re(jp[3 * m]);
-			 tmpi = c_im(jp[3 * m]);
-			 r2_3 = ((wr * tmpr) - (wi * tmpi));
-			 i2_3 = ((wi * tmpr) + (wr * tmpi));
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_3 = (r2_1 - r2_3);
-			 i1_3 = (i2_1 - i2_3);
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          wr = c_re(W[1 * l1]);
+          wi = c_im(W[1 * l1]);
+          tmpr = c_re(jp[1 * m]);
+          tmpi = c_im(jp[1 * m]);
+          r2_1 = ((wr * tmpr) - (wi * tmpi));
+          i2_1 = ((wi * tmpr) + (wr * tmpi));
+          wr = c_re(W[3 * l1]);
+          wi = c_im(W[3 * l1]);
+          tmpr = c_re(jp[3 * m]);
+          tmpi = c_im(jp[3 * m]);
+          r2_3 = ((wr * tmpr) - (wi * tmpi));
+          i2_3 = ((wi * tmpr) + (wr * tmpi));
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_3 = (r2_1 - r2_3);
+          i1_3 = (i2_1 - i2_3);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -453,66 +616,98 @@ void fft_twiddle_4(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 		    c_im(kp[1 * m]) = (i1_2 - r1_3);
 		    c_re(kp[3 * m]) = (r1_2 - i1_3);
 		    c_im(kp[3 * m]) = (i1_2 + r1_3);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_4,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_4(a, ab, in, out, W, nW, nWdn, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_4,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_4(ab, b, in, out, W, nW, nWdn, m);
-          #pragma omp taskwait
-     }
+#endif
+
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_twiddle_4_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
 		    REAL r1_3, i1_3;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 r2_0 = c_re(jp[0 * m]);
-			 i2_0 = c_im(jp[0 * m]);
-			 wr = c_re(W[2 * l1]);
-			 wi = c_im(W[2 * l1]);
-			 tmpr = c_re(jp[2 * m]);
-			 tmpi = c_im(jp[2 * m]);
-			 r2_2 = ((wr * tmpr) - (wi * tmpi));
-			 i2_2 = ((wi * tmpr) + (wr * tmpi));
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_2 = (r2_0 - r2_2);
-			 i1_2 = (i2_0 - i2_2);
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          r2_0 = c_re(jp[0 * m]);
+          i2_0 = c_im(jp[0 * m]);
+          wr = c_re(W[2 * l1]);
+          wi = c_im(W[2 * l1]);
+          tmpr = c_re(jp[2 * m]);
+          tmpi = c_im(jp[2 * m]);
+          r2_2 = ((wr * tmpr) - (wi * tmpi));
+          i2_2 = ((wi * tmpr) + (wr * tmpi));
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_2 = (r2_0 - r2_2);
+          i1_2 = (i2_0 - i2_2);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 wr = c_re(W[1 * l1]);
-			 wi = c_im(W[1 * l1]);
-			 tmpr = c_re(jp[1 * m]);
-			 tmpi = c_im(jp[1 * m]);
-			 r2_1 = ((wr * tmpr) - (wi * tmpi));
-			 i2_1 = ((wi * tmpr) + (wr * tmpi));
-			 wr = c_re(W[3 * l1]);
-			 wi = c_im(W[3 * l1]);
-			 tmpr = c_re(jp[3 * m]);
-			 tmpi = c_im(jp[3 * m]);
-			 r2_3 = ((wr * tmpr) - (wi * tmpi));
-			 i2_3 = ((wi * tmpr) + (wr * tmpi));
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_3 = (r2_1 - r2_3);
-			 i1_3 = (i2_1 - i2_3);
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          wr = c_re(W[1 * l1]);
+          wi = c_im(W[1 * l1]);
+          tmpr = c_re(jp[1 * m]);
+          tmpi = c_im(jp[1 * m]);
+          r2_1 = ((wr * tmpr) - (wi * tmpi));
+          i2_1 = ((wi * tmpr) + (wr * tmpi));
+          wr = c_re(W[3 * l1]);
+          wi = c_im(W[3 * l1]);
+          tmpr = c_re(jp[3 * m]);
+          tmpi = c_im(jp[3 * m]);
+          r2_3 = ((wr * tmpr) - (wi * tmpi));
+          i2_3 = ((wi * tmpr) + (wr * tmpi));
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_3 = (r2_1 - r2_3);
+          i1_3 = (i2_1 - i2_3);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -522,67 +717,95 @@ void fft_twiddle_4_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 		    c_im(kp[1 * m]) = (i1_2 - r1_3);
 		    c_re(kp[3 * m]) = (r1_2 - i1_3);
 		    c_im(kp[3 * m]) = (i1_2 + r1_3);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_twiddle_4_seq(a, ab, in, out, W, nW, nWdn, m);
 	  fft_twiddle_4_seq(ab, b, in, out, W, nW, nWdn, m);
-     }
+  }
 }
 void fft_unshuffle_4(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 4;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_4,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_4(a, ab, in, out, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_4,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_4(ab, b, in, out, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_unshuffle_4_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 4;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_unshuffle_4_seq(a, ab, in, out, m);
 	  fft_unshuffle_4_seq(ab, b, in, out, m);
-     }
+  }
 }
+
 void fft_base_8(COMPLEX * in, COMPLEX * out)
 {
-     REAL tmpr, tmpi;
-     {
+  REAL tmpr, tmpi;
+  {
 	  REAL r1_0, i1_0;
 	  REAL r1_1, i1_1;
 	  REAL r1_2, i1_2;
@@ -592,11 +815,11 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 	  REAL r1_6, i1_6;
 	  REAL r1_7, i1_7;
 	  {
-	       REAL r2_0, i2_0;
-	       REAL r2_2, i2_2;
-	       REAL r2_4, i2_4;
-	       REAL r2_6, i2_6;
-	       {
+      REAL r2_0, i2_0;
+      REAL r2_2, i2_2;
+      REAL r2_4, i2_4;
+      REAL r2_6, i2_6;
+      {
 		    REAL r3_0, i3_0;
 		    REAL r3_4, i3_4;
 		    r3_0 = c_re(in[0]);
@@ -607,8 +830,8 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 		    i2_0 = (i3_0 + i3_4);
 		    r2_4 = (r3_0 - r3_4);
 		    i2_4 = (i3_0 - i3_4);
-	       }
-	       {
+      }
+      {
 		    REAL r3_2, i3_2;
 		    REAL r3_6, i3_6;
 		    r3_2 = c_re(in[2]);
@@ -619,22 +842,22 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 		    i2_2 = (i3_2 + i3_6);
 		    r2_6 = (r3_2 - r3_6);
 		    i2_6 = (i3_2 - i3_6);
-	       }
-	       r1_0 = (r2_0 + r2_2);
-	       i1_0 = (i2_0 + i2_2);
-	       r1_4 = (r2_0 - r2_2);
-	       i1_4 = (i2_0 - i2_2);
-	       r1_2 = (r2_4 + i2_6);
-	       i1_2 = (i2_4 - r2_6);
-	       r1_6 = (r2_4 - i2_6);
-	       i1_6 = (i2_4 + r2_6);
+      }
+      r1_0 = (r2_0 + r2_2);
+      i1_0 = (i2_0 + i2_2);
+      r1_4 = (r2_0 - r2_2);
+      i1_4 = (i2_0 - i2_2);
+      r1_2 = (r2_4 + i2_6);
+      i1_2 = (i2_4 - r2_6);
+      r1_6 = (r2_4 - i2_6);
+      i1_6 = (i2_4 + r2_6);
 	  }
 	  {
-	       REAL r2_1, i2_1;
-	       REAL r2_3, i2_3;
-	       REAL r2_5, i2_5;
-	       REAL r2_7, i2_7;
-	       {
+      REAL r2_1, i2_1;
+      REAL r2_3, i2_3;
+      REAL r2_5, i2_5;
+      REAL r2_7, i2_7;
+      {
 		    REAL r3_1, i3_1;
 		    REAL r3_5, i3_5;
 		    r3_1 = c_re(in[1]);
@@ -645,8 +868,8 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 		    i2_1 = (i3_1 + i3_5);
 		    r2_5 = (r3_1 - r3_5);
 		    i2_5 = (i3_1 - i3_5);
-	       }
-	       {
+      }
+      {
 		    REAL r3_3, i3_3;
 		    REAL r3_7, i3_7;
 		    r3_3 = c_re(in[3]);
@@ -657,15 +880,15 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 		    i2_3 = (i3_3 + i3_7);
 		    r2_7 = (r3_3 - r3_7);
 		    i2_7 = (i3_3 - i3_7);
-	       }
-	       r1_1 = (r2_1 + r2_3);
-	       i1_1 = (i2_1 + i2_3);
-	       r1_5 = (r2_1 - r2_3);
-	       i1_5 = (i2_1 - i2_3);
-	       r1_3 = (r2_5 + i2_7);
-	       i1_3 = (i2_5 - r2_7);
-	       r1_7 = (r2_5 - i2_7);
-	       i1_7 = (i2_5 + r2_7);
+      }
+      r1_1 = (r2_1 + r2_3);
+      i1_1 = (i2_1 + i2_3);
+      r1_5 = (r2_1 - r2_3);
+      i1_5 = (i2_1 - i2_3);
+      r1_3 = (r2_5 + i2_7);
+      i1_3 = (i2_5 - r2_7);
+      r1_7 = (r2_5 - i2_7);
+      i1_7 = (i2_5 + r2_7);
 	  }
 	  c_re(out[0]) = (r1_0 + r1_1);
 	  c_im(out[0]) = (i1_0 + i1_1);
@@ -687,18 +910,19 @@ void fft_base_8(COMPLEX * in, COMPLEX * out)
 	  c_im(out[3]) = (i1_6 - tmpi);
 	  c_re(out[7]) = (r1_6 - tmpr);
 	  c_im(out[7]) = (i1_6 + tmpi);
-     }
+  }
 }
+
 void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -708,11 +932,11 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 		    REAL r1_6, i1_6;
 		    REAL r1_7, i1_7;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      r3_0 = c_re(jp[0 * m]);
@@ -727,8 +951,8 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 			      i2_0 = (i3_0 + i3_4);
 			      r2_4 = (r3_0 - r3_4);
 			      i2_4 = (i3_0 - i3_4);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      wr = c_re(W[2 * l1]);
@@ -747,22 +971,22 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 			      i2_2 = (i3_2 + i3_6);
 			      r2_6 = (r3_2 - r3_6);
 			      i2_6 = (i3_2 - i3_6);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_4 = (r2_0 - r2_2);
-			 i1_4 = (i2_0 - i2_2);
-			 r1_2 = (r2_4 + i2_6);
-			 i1_2 = (i2_4 - r2_6);
-			 r1_6 = (r2_4 - i2_6);
-			 i1_6 = (i2_4 + r2_6);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_4 = (r2_0 - r2_2);
+          i1_4 = (i2_0 - i2_2);
+          r1_2 = (r2_4 + i2_6);
+          i1_2 = (i2_4 - r2_6);
+          r1_6 = (r2_4 - i2_6);
+          i1_6 = (i2_4 + r2_6);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      wr = c_re(W[1 * l1]);
@@ -781,8 +1005,8 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 			      i2_1 = (i3_1 + i3_5);
 			      r2_5 = (r3_1 - r3_5);
 			      i2_5 = (i3_1 - i3_5);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      wr = c_re(W[3 * l1]);
@@ -801,15 +1025,15 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 			      i2_3 = (i3_3 + i3_7);
 			      r2_7 = (r3_3 - r3_7);
 			      i2_7 = (i3_3 - i3_7);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_5 = (r2_1 - r2_3);
-			 i1_5 = (i2_1 - i2_3);
-			 r1_3 = (r2_5 + i2_7);
-			 i1_3 = (i2_5 - r2_7);
-			 r1_7 = (r2_5 - i2_7);
-			 i1_7 = (i2_5 + r2_7);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_5 = (r2_1 - r2_3);
+          i1_5 = (i2_1 - i2_3);
+          r1_3 = (r2_5 + i2_7);
+          i1_3 = (i2_5 - r2_7);
+          r1_7 = (r2_5 - i2_7);
+          i1_7 = (i2_5 + r2_7);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -831,27 +1055,59 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 		    c_im(kp[3 * m]) = (i1_6 - tmpi);
 		    c_re(kp[7 * m]) = (r1_6 - tmpr);
 		    c_im(kp[7 * m]) = (i1_6 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_8,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_8(a, ab, in, out, W, nW, nWdn, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_8,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_8(ab, b, in, out, W, nW, nWdn, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -861,11 +1117,11 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 		    REAL r1_6, i1_6;
 		    REAL r1_7, i1_7;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      r3_0 = c_re(jp[0 * m]);
@@ -880,8 +1136,8 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 			      i2_0 = (i3_0 + i3_4);
 			      r2_4 = (r3_0 - r3_4);
 			      i2_4 = (i3_0 - i3_4);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      wr = c_re(W[2 * l1]);
@@ -900,22 +1156,22 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 			      i2_2 = (i3_2 + i3_6);
 			      r2_6 = (r3_2 - r3_6);
 			      i2_6 = (i3_2 - i3_6);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_4 = (r2_0 - r2_2);
-			 i1_4 = (i2_0 - i2_2);
-			 r1_2 = (r2_4 + i2_6);
-			 i1_2 = (i2_4 - r2_6);
-			 r1_6 = (r2_4 - i2_6);
-			 i1_6 = (i2_4 + r2_6);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_4 = (r2_0 - r2_2);
+          i1_4 = (i2_0 - i2_2);
+          r1_2 = (r2_4 + i2_6);
+          i1_2 = (i2_4 - r2_6);
+          r1_6 = (r2_4 - i2_6);
+          i1_6 = (i2_4 + r2_6);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      wr = c_re(W[1 * l1]);
@@ -934,8 +1190,8 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 			      i2_1 = (i3_1 + i3_5);
 			      r2_5 = (r3_1 - r3_5);
 			      i2_5 = (i3_1 - i3_5);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      wr = c_re(W[3 * l1]);
@@ -954,15 +1210,15 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 			      i2_3 = (i3_3 + i3_7);
 			      r2_7 = (r3_3 - r3_7);
 			      i2_7 = (i3_3 - i3_7);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_5 = (r2_1 - r2_3);
-			 i1_5 = (i2_1 - i2_3);
-			 r1_3 = (r2_5 + i2_7);
-			 i1_3 = (i2_5 - r2_7);
-			 r1_7 = (r2_5 - i2_7);
-			 i1_7 = (i2_5 + r2_7);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_5 = (r2_1 - r2_3);
+          i1_5 = (i2_1 - i2_3);
+          r1_3 = (r2_5 + i2_7);
+          i1_3 = (i2_5 - r2_7);
+          r1_7 = (r2_5 - i2_7);
+          i1_7 = (i2_5 + r2_7);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -984,83 +1240,109 @@ void fft_twiddle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, i
 		    c_im(kp[3 * m]) = (i1_6 - tmpi);
 		    c_re(kp[7 * m]) = (r1_6 - tmpr);
 		    c_im(kp[7 * m]) = (i1_6 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_twiddle_8_seq(a, ab, in, out, W, nW, nWdn, m);
 	  fft_twiddle_8_seq(ab, b, in, out, W, nW, nWdn, m);
-     }
+  }
 }
 void fft_unshuffle_8(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 8;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_8,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_8(a, ab, in, out, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_8,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_8(ab, b, in, out, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_unshuffle_8_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 8;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_unshuffle_8_seq(a, ab, in, out, m);
 	  fft_unshuffle_8_seq(ab, b, in, out, m);
-     }
+  }
 }
 void fft_base_16(COMPLEX * in, COMPLEX * out)
 {
-     REAL tmpr, tmpi;
-     {
+  REAL tmpr, tmpi;
+  {
 	  REAL r1_0, i1_0;
 	  REAL r1_1, i1_1;
 	  REAL r1_2, i1_2;
@@ -1078,42 +1360,42 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 	  REAL r1_14, i1_14;
 	  REAL r1_15, i1_15;
 	  {
-	       REAL r2_0, i2_0;
-	       REAL r2_2, i2_2;
-	       REAL r2_4, i2_4;
-	       REAL r2_6, i2_6;
-	       REAL r2_8, i2_8;
-	       REAL r2_10, i2_10;
-	       REAL r2_12, i2_12;
-	       REAL r2_14, i2_14;
-	       {
+      REAL r2_0, i2_0;
+      REAL r2_2, i2_2;
+      REAL r2_4, i2_4;
+      REAL r2_6, i2_6;
+      REAL r2_8, i2_8;
+      REAL r2_10, i2_10;
+      REAL r2_12, i2_12;
+      REAL r2_14, i2_14;
+      {
 		    REAL r3_0, i3_0;
 		    REAL r3_4, i3_4;
 		    REAL r3_8, i3_8;
 		    REAL r3_12, i3_12;
 		    {
-			 REAL r4_0, i4_0;
-			 REAL r4_8, i4_8;
-			 r4_0 = c_re(in[0]);
-			 i4_0 = c_im(in[0]);
-			 r4_8 = c_re(in[8]);
-			 i4_8 = c_im(in[8]);
-			 r3_0 = (r4_0 + r4_8);
-			 i3_0 = (i4_0 + i4_8);
-			 r3_8 = (r4_0 - r4_8);
-			 i3_8 = (i4_0 - i4_8);
+          REAL r4_0, i4_0;
+          REAL r4_8, i4_8;
+          r4_0 = c_re(in[0]);
+          i4_0 = c_im(in[0]);
+          r4_8 = c_re(in[8]);
+          i4_8 = c_im(in[8]);
+          r3_0 = (r4_0 + r4_8);
+          i3_0 = (i4_0 + i4_8);
+          r3_8 = (r4_0 - r4_8);
+          i3_8 = (i4_0 - i4_8);
 		    }
 		    {
-			 REAL r4_4, i4_4;
-			 REAL r4_12, i4_12;
-			 r4_4 = c_re(in[4]);
-			 i4_4 = c_im(in[4]);
-			 r4_12 = c_re(in[12]);
-			 i4_12 = c_im(in[12]);
-			 r3_4 = (r4_4 + r4_12);
-			 i3_4 = (i4_4 + i4_12);
-			 r3_12 = (r4_4 - r4_12);
-			 i3_12 = (i4_4 - i4_12);
+          REAL r4_4, i4_4;
+          REAL r4_12, i4_12;
+          r4_4 = c_re(in[4]);
+          i4_4 = c_im(in[4]);
+          r4_12 = c_re(in[12]);
+          i4_12 = c_im(in[12]);
+          r3_4 = (r4_4 + r4_12);
+          i3_4 = (i4_4 + i4_12);
+          r3_12 = (r4_4 - r4_12);
+          i3_12 = (i4_4 - i4_12);
 		    }
 		    r2_0 = (r3_0 + r3_4);
 		    i2_0 = (i3_0 + i3_4);
@@ -1123,35 +1405,35 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 		    i2_4 = (i3_8 - r3_12);
 		    r2_12 = (r3_8 - i3_12);
 		    i2_12 = (i3_8 + r3_12);
-	       }
-	       {
+      }
+      {
 		    REAL r3_2, i3_2;
 		    REAL r3_6, i3_6;
 		    REAL r3_10, i3_10;
 		    REAL r3_14, i3_14;
 		    {
-			 REAL r4_2, i4_2;
-			 REAL r4_10, i4_10;
-			 r4_2 = c_re(in[2]);
-			 i4_2 = c_im(in[2]);
-			 r4_10 = c_re(in[10]);
-			 i4_10 = c_im(in[10]);
-			 r3_2 = (r4_2 + r4_10);
-			 i3_2 = (i4_2 + i4_10);
-			 r3_10 = (r4_2 - r4_10);
-			 i3_10 = (i4_2 - i4_10);
+          REAL r4_2, i4_2;
+          REAL r4_10, i4_10;
+          r4_2 = c_re(in[2]);
+          i4_2 = c_im(in[2]);
+          r4_10 = c_re(in[10]);
+          i4_10 = c_im(in[10]);
+          r3_2 = (r4_2 + r4_10);
+          i3_2 = (i4_2 + i4_10);
+          r3_10 = (r4_2 - r4_10);
+          i3_10 = (i4_2 - i4_10);
 		    }
 		    {
-			 REAL r4_6, i4_6;
-			 REAL r4_14, i4_14;
-			 r4_6 = c_re(in[6]);
-			 i4_6 = c_im(in[6]);
-			 r4_14 = c_re(in[14]);
-			 i4_14 = c_im(in[14]);
-			 r3_6 = (r4_6 + r4_14);
-			 i3_6 = (i4_6 + i4_14);
-			 r3_14 = (r4_6 - r4_14);
-			 i3_14 = (i4_6 - i4_14);
+          REAL r4_6, i4_6;
+          REAL r4_14, i4_14;
+          r4_6 = c_re(in[6]);
+          i4_6 = c_im(in[6]);
+          r4_14 = c_re(in[14]);
+          i4_14 = c_im(in[14]);
+          r3_6 = (r4_6 + r4_14);
+          i3_6 = (i4_6 + i4_14);
+          r3_14 = (r4_6 - r4_14);
+          i3_14 = (i4_6 - i4_14);
 		    }
 		    r2_2 = (r3_2 + r3_6);
 		    i2_2 = (i3_2 + i3_6);
@@ -1161,65 +1443,65 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 		    i2_6 = (i3_10 - r3_14);
 		    r2_14 = (r3_10 - i3_14);
 		    i2_14 = (i3_10 + r3_14);
-	       }
-	       r1_0 = (r2_0 + r2_2);
-	       i1_0 = (i2_0 + i2_2);
-	       r1_8 = (r2_0 - r2_2);
-	       i1_8 = (i2_0 - i2_2);
-	       tmpr = (0.707106781187 * (r2_6 + i2_6));
-	       tmpi = (0.707106781187 * (i2_6 - r2_6));
-	       r1_2 = (r2_4 + tmpr);
-	       i1_2 = (i2_4 + tmpi);
-	       r1_10 = (r2_4 - tmpr);
-	       i1_10 = (i2_4 - tmpi);
-	       r1_4 = (r2_8 + i2_10);
-	       i1_4 = (i2_8 - r2_10);
-	       r1_12 = (r2_8 - i2_10);
-	       i1_12 = (i2_8 + r2_10);
-	       tmpr = (0.707106781187 * (i2_14 - r2_14));
-	       tmpi = (0.707106781187 * (r2_14 + i2_14));
-	       r1_6 = (r2_12 + tmpr);
-	       i1_6 = (i2_12 - tmpi);
-	       r1_14 = (r2_12 - tmpr);
-	       i1_14 = (i2_12 + tmpi);
+      }
+      r1_0 = (r2_0 + r2_2);
+      i1_0 = (i2_0 + i2_2);
+      r1_8 = (r2_0 - r2_2);
+      i1_8 = (i2_0 - i2_2);
+      tmpr = (0.707106781187 * (r2_6 + i2_6));
+      tmpi = (0.707106781187 * (i2_6 - r2_6));
+      r1_2 = (r2_4 + tmpr);
+      i1_2 = (i2_4 + tmpi);
+      r1_10 = (r2_4 - tmpr);
+      i1_10 = (i2_4 - tmpi);
+      r1_4 = (r2_8 + i2_10);
+      i1_4 = (i2_8 - r2_10);
+      r1_12 = (r2_8 - i2_10);
+      i1_12 = (i2_8 + r2_10);
+      tmpr = (0.707106781187 * (i2_14 - r2_14));
+      tmpi = (0.707106781187 * (r2_14 + i2_14));
+      r1_6 = (r2_12 + tmpr);
+      i1_6 = (i2_12 - tmpi);
+      r1_14 = (r2_12 - tmpr);
+      i1_14 = (i2_12 + tmpi);
 	  }
 	  {
-	       REAL r2_1, i2_1;
-	       REAL r2_3, i2_3;
-	       REAL r2_5, i2_5;
-	       REAL r2_7, i2_7;
-	       REAL r2_9, i2_9;
-	       REAL r2_11, i2_11;
-	       REAL r2_13, i2_13;
-	       REAL r2_15, i2_15;
-	       {
+      REAL r2_1, i2_1;
+      REAL r2_3, i2_3;
+      REAL r2_5, i2_5;
+      REAL r2_7, i2_7;
+      REAL r2_9, i2_9;
+      REAL r2_11, i2_11;
+      REAL r2_13, i2_13;
+      REAL r2_15, i2_15;
+      {
 		    REAL r3_1, i3_1;
 		    REAL r3_5, i3_5;
 		    REAL r3_9, i3_9;
 		    REAL r3_13, i3_13;
 		    {
-			 REAL r4_1, i4_1;
-			 REAL r4_9, i4_9;
-			 r4_1 = c_re(in[1]);
-			 i4_1 = c_im(in[1]);
-			 r4_9 = c_re(in[9]);
-			 i4_9 = c_im(in[9]);
-			 r3_1 = (r4_1 + r4_9);
-			 i3_1 = (i4_1 + i4_9);
-			 r3_9 = (r4_1 - r4_9);
-			 i3_9 = (i4_1 - i4_9);
+          REAL r4_1, i4_1;
+          REAL r4_9, i4_9;
+          r4_1 = c_re(in[1]);
+          i4_1 = c_im(in[1]);
+          r4_9 = c_re(in[9]);
+          i4_9 = c_im(in[9]);
+          r3_1 = (r4_1 + r4_9);
+          i3_1 = (i4_1 + i4_9);
+          r3_9 = (r4_1 - r4_9);
+          i3_9 = (i4_1 - i4_9);
 		    }
 		    {
-			 REAL r4_5, i4_5;
-			 REAL r4_13, i4_13;
-			 r4_5 = c_re(in[5]);
-			 i4_5 = c_im(in[5]);
-			 r4_13 = c_re(in[13]);
-			 i4_13 = c_im(in[13]);
-			 r3_5 = (r4_5 + r4_13);
-			 i3_5 = (i4_5 + i4_13);
-			 r3_13 = (r4_5 - r4_13);
-			 i3_13 = (i4_5 - i4_13);
+          REAL r4_5, i4_5;
+          REAL r4_13, i4_13;
+          r4_5 = c_re(in[5]);
+          i4_5 = c_im(in[5]);
+          r4_13 = c_re(in[13]);
+          i4_13 = c_im(in[13]);
+          r3_5 = (r4_5 + r4_13);
+          i3_5 = (i4_5 + i4_13);
+          r3_13 = (r4_5 - r4_13);
+          i3_13 = (i4_5 - i4_13);
 		    }
 		    r2_1 = (r3_1 + r3_5);
 		    i2_1 = (i3_1 + i3_5);
@@ -1229,35 +1511,35 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 		    i2_5 = (i3_9 - r3_13);
 		    r2_13 = (r3_9 - i3_13);
 		    i2_13 = (i3_9 + r3_13);
-	       }
-	       {
+      }
+      {
 		    REAL r3_3, i3_3;
 		    REAL r3_7, i3_7;
 		    REAL r3_11, i3_11;
 		    REAL r3_15, i3_15;
 		    {
-			 REAL r4_3, i4_3;
-			 REAL r4_11, i4_11;
-			 r4_3 = c_re(in[3]);
-			 i4_3 = c_im(in[3]);
-			 r4_11 = c_re(in[11]);
-			 i4_11 = c_im(in[11]);
-			 r3_3 = (r4_3 + r4_11);
-			 i3_3 = (i4_3 + i4_11);
-			 r3_11 = (r4_3 - r4_11);
-			 i3_11 = (i4_3 - i4_11);
+          REAL r4_3, i4_3;
+          REAL r4_11, i4_11;
+          r4_3 = c_re(in[3]);
+          i4_3 = c_im(in[3]);
+          r4_11 = c_re(in[11]);
+          i4_11 = c_im(in[11]);
+          r3_3 = (r4_3 + r4_11);
+          i3_3 = (i4_3 + i4_11);
+          r3_11 = (r4_3 - r4_11);
+          i3_11 = (i4_3 - i4_11);
 		    }
 		    {
-			 REAL r4_7, i4_7;
-			 REAL r4_15, i4_15;
-			 r4_7 = c_re(in[7]);
-			 i4_7 = c_im(in[7]);
-			 r4_15 = c_re(in[15]);
-			 i4_15 = c_im(in[15]);
-			 r3_7 = (r4_7 + r4_15);
-			 i3_7 = (i4_7 + i4_15);
-			 r3_15 = (r4_7 - r4_15);
-			 i3_15 = (i4_7 - i4_15);
+          REAL r4_7, i4_7;
+          REAL r4_15, i4_15;
+          r4_7 = c_re(in[7]);
+          i4_7 = c_im(in[7]);
+          r4_15 = c_re(in[15]);
+          i4_15 = c_im(in[15]);
+          r3_7 = (r4_7 + r4_15);
+          i3_7 = (i4_7 + i4_15);
+          r3_15 = (r4_7 - r4_15);
+          i3_15 = (i4_7 - i4_15);
 		    }
 		    r2_3 = (r3_3 + r3_7);
 		    i2_3 = (i3_3 + i3_7);
@@ -1267,27 +1549,27 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 		    i2_7 = (i3_11 - r3_15);
 		    r2_15 = (r3_11 - i3_15);
 		    i2_15 = (i3_11 + r3_15);
-	       }
-	       r1_1 = (r2_1 + r2_3);
-	       i1_1 = (i2_1 + i2_3);
-	       r1_9 = (r2_1 - r2_3);
-	       i1_9 = (i2_1 - i2_3);
-	       tmpr = (0.707106781187 * (r2_7 + i2_7));
-	       tmpi = (0.707106781187 * (i2_7 - r2_7));
-	       r1_3 = (r2_5 + tmpr);
-	       i1_3 = (i2_5 + tmpi);
-	       r1_11 = (r2_5 - tmpr);
-	       i1_11 = (i2_5 - tmpi);
-	       r1_5 = (r2_9 + i2_11);
-	       i1_5 = (i2_9 - r2_11);
-	       r1_13 = (r2_9 - i2_11);
-	       i1_13 = (i2_9 + r2_11);
-	       tmpr = (0.707106781187 * (i2_15 - r2_15));
-	       tmpi = (0.707106781187 * (r2_15 + i2_15));
-	       r1_7 = (r2_13 + tmpr);
-	       i1_7 = (i2_13 - tmpi);
-	       r1_15 = (r2_13 - tmpr);
-	       i1_15 = (i2_13 + tmpi);
+      }
+      r1_1 = (r2_1 + r2_3);
+      i1_1 = (i2_1 + i2_3);
+      r1_9 = (r2_1 - r2_3);
+      i1_9 = (i2_1 - i2_3);
+      tmpr = (0.707106781187 * (r2_7 + i2_7));
+      tmpi = (0.707106781187 * (i2_7 - r2_7));
+      r1_3 = (r2_5 + tmpr);
+      i1_3 = (i2_5 + tmpi);
+      r1_11 = (r2_5 - tmpr);
+      i1_11 = (i2_5 - tmpi);
+      r1_5 = (r2_9 + i2_11);
+      i1_5 = (i2_9 - r2_11);
+      r1_13 = (r2_9 - i2_11);
+      i1_13 = (i2_9 + r2_11);
+      tmpr = (0.707106781187 * (i2_15 - r2_15));
+      tmpi = (0.707106781187 * (r2_15 + i2_15));
+      r1_7 = (r2_13 + tmpr);
+      i1_7 = (i2_13 - tmpi);
+      r1_15 = (r2_13 - tmpr);
+      i1_15 = (i2_13 + tmpi);
 	  }
 	  c_re(out[0]) = (r1_0 + r1_1);
 	  c_im(out[0]) = (i1_0 + i1_1);
@@ -1333,18 +1615,18 @@ void fft_base_16(COMPLEX * in, COMPLEX * out)
 	  c_im(out[7]) = (i1_14 - tmpi);
 	  c_re(out[15]) = (r1_14 - tmpr);
 	  c_im(out[15]) = (i1_14 + tmpi);
-     }
+  }
 }
 void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -1362,54 +1644,54 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 		    REAL r1_14, i1_14;
 		    REAL r1_15, i1_15;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 REAL r2_8, i2_8;
-			 REAL r2_10, i2_10;
-			 REAL r2_12, i2_12;
-			 REAL r2_14, i2_14;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          REAL r2_8, i2_8;
+          REAL r2_10, i2_10;
+          REAL r2_12, i2_12;
+          REAL r2_14, i2_14;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      REAL r3_8, i3_8;
 			      REAL r3_12, i3_12;
 			      {
-				   REAL r4_0, i4_0;
-				   REAL r4_8, i4_8;
-				   r4_0 = c_re(jp[0 * m]);
-				   i4_0 = c_im(jp[0 * m]);
-				   wr = c_re(W[8 * l1]);
-				   wi = c_im(W[8 * l1]);
-				   tmpr = c_re(jp[8 * m]);
-				   tmpi = c_im(jp[8 * m]);
-				   r4_8 = ((wr * tmpr) - (wi * tmpi));
-				   i4_8 = ((wi * tmpr) + (wr * tmpi));
-				   r3_0 = (r4_0 + r4_8);
-				   i3_0 = (i4_0 + i4_8);
-				   r3_8 = (r4_0 - r4_8);
-				   i3_8 = (i4_0 - i4_8);
+              REAL r4_0, i4_0;
+              REAL r4_8, i4_8;
+              r4_0 = c_re(jp[0 * m]);
+              i4_0 = c_im(jp[0 * m]);
+              wr = c_re(W[8 * l1]);
+              wi = c_im(W[8 * l1]);
+              tmpr = c_re(jp[8 * m]);
+              tmpi = c_im(jp[8 * m]);
+              r4_8 = ((wr * tmpr) - (wi * tmpi));
+              i4_8 = ((wi * tmpr) + (wr * tmpi));
+              r3_0 = (r4_0 + r4_8);
+              i3_0 = (i4_0 + i4_8);
+              r3_8 = (r4_0 - r4_8);
+              i3_8 = (i4_0 - i4_8);
 			      }
 			      {
-				   REAL r4_4, i4_4;
-				   REAL r4_12, i4_12;
-				   wr = c_re(W[4 * l1]);
-				   wi = c_im(W[4 * l1]);
-				   tmpr = c_re(jp[4 * m]);
-				   tmpi = c_im(jp[4 * m]);
-				   r4_4 = ((wr * tmpr) - (wi * tmpi));
-				   i4_4 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[12 * l1]);
-				   wi = c_im(W[12 * l1]);
-				   tmpr = c_re(jp[12 * m]);
-				   tmpi = c_im(jp[12 * m]);
-				   r4_12 = ((wr * tmpr) - (wi * tmpi));
-				   i4_12 = ((wi * tmpr) + (wr * tmpi));
-				   r3_4 = (r4_4 + r4_12);
-				   i3_4 = (i4_4 + i4_12);
-				   r3_12 = (r4_4 - r4_12);
-				   i3_12 = (i4_4 - i4_12);
+              REAL r4_4, i4_4;
+              REAL r4_12, i4_12;
+              wr = c_re(W[4 * l1]);
+              wi = c_im(W[4 * l1]);
+              tmpr = c_re(jp[4 * m]);
+              tmpi = c_im(jp[4 * m]);
+              r4_4 = ((wr * tmpr) - (wi * tmpi));
+              i4_4 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[12 * l1]);
+              wi = c_im(W[12 * l1]);
+              tmpr = c_re(jp[12 * m]);
+              tmpi = c_im(jp[12 * m]);
+              r4_12 = ((wr * tmpr) - (wi * tmpi));
+              i4_12 = ((wi * tmpr) + (wr * tmpi));
+              r3_4 = (r4_4 + r4_12);
+              i3_4 = (i4_4 + i4_12);
+              r3_12 = (r4_4 - r4_12);
+              i3_12 = (i4_4 - i4_12);
 			      }
 			      r2_0 = (r3_0 + r3_4);
 			      i2_0 = (i3_0 + i3_4);
@@ -1419,51 +1701,51 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_4 = (i3_8 - r3_12);
 			      r2_12 = (r3_8 - i3_12);
 			      i2_12 = (i3_8 + r3_12);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      REAL r3_10, i3_10;
 			      REAL r3_14, i3_14;
 			      {
-				   REAL r4_2, i4_2;
-				   REAL r4_10, i4_10;
-				   wr = c_re(W[2 * l1]);
-				   wi = c_im(W[2 * l1]);
-				   tmpr = c_re(jp[2 * m]);
-				   tmpi = c_im(jp[2 * m]);
-				   r4_2 = ((wr * tmpr) - (wi * tmpi));
-				   i4_2 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[10 * l1]);
-				   wi = c_im(W[10 * l1]);
-				   tmpr = c_re(jp[10 * m]);
-				   tmpi = c_im(jp[10 * m]);
-				   r4_10 = ((wr * tmpr) - (wi * tmpi));
-				   i4_10 = ((wi * tmpr) + (wr * tmpi));
-				   r3_2 = (r4_2 + r4_10);
-				   i3_2 = (i4_2 + i4_10);
-				   r3_10 = (r4_2 - r4_10);
-				   i3_10 = (i4_2 - i4_10);
+              REAL r4_2, i4_2;
+              REAL r4_10, i4_10;
+              wr = c_re(W[2 * l1]);
+              wi = c_im(W[2 * l1]);
+              tmpr = c_re(jp[2 * m]);
+              tmpi = c_im(jp[2 * m]);
+              r4_2 = ((wr * tmpr) - (wi * tmpi));
+              i4_2 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[10 * l1]);
+              wi = c_im(W[10 * l1]);
+              tmpr = c_re(jp[10 * m]);
+              tmpi = c_im(jp[10 * m]);
+              r4_10 = ((wr * tmpr) - (wi * tmpi));
+              i4_10 = ((wi * tmpr) + (wr * tmpi));
+              r3_2 = (r4_2 + r4_10);
+              i3_2 = (i4_2 + i4_10);
+              r3_10 = (r4_2 - r4_10);
+              i3_10 = (i4_2 - i4_10);
 			      }
 			      {
-				   REAL r4_6, i4_6;
-				   REAL r4_14, i4_14;
-				   wr = c_re(W[6 * l1]);
-				   wi = c_im(W[6 * l1]);
-				   tmpr = c_re(jp[6 * m]);
-				   tmpi = c_im(jp[6 * m]);
-				   r4_6 = ((wr * tmpr) - (wi * tmpi));
-				   i4_6 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[14 * l1]);
-				   wi = c_im(W[14 * l1]);
-				   tmpr = c_re(jp[14 * m]);
-				   tmpi = c_im(jp[14 * m]);
-				   r4_14 = ((wr * tmpr) - (wi * tmpi));
-				   i4_14 = ((wi * tmpr) + (wr * tmpi));
-				   r3_6 = (r4_6 + r4_14);
-				   i3_6 = (i4_6 + i4_14);
-				   r3_14 = (r4_6 - r4_14);
-				   i3_14 = (i4_6 - i4_14);
+              REAL r4_6, i4_6;
+              REAL r4_14, i4_14;
+              wr = c_re(W[6 * l1]);
+              wi = c_im(W[6 * l1]);
+              tmpr = c_re(jp[6 * m]);
+              tmpi = c_im(jp[6 * m]);
+              r4_6 = ((wr * tmpr) - (wi * tmpi));
+              i4_6 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[14 * l1]);
+              wi = c_im(W[14 * l1]);
+              tmpr = c_re(jp[14 * m]);
+              tmpi = c_im(jp[14 * m]);
+              r4_14 = ((wr * tmpr) - (wi * tmpi));
+              i4_14 = ((wi * tmpr) + (wr * tmpi));
+              r3_6 = (r4_6 + r4_14);
+              i3_6 = (i4_6 + i4_14);
+              r3_14 = (r4_6 - r4_14);
+              i3_14 = (i4_6 - i4_14);
 			      }
 			      r2_2 = (r3_2 + r3_6);
 			      i2_2 = (i3_2 + i3_6);
@@ -1473,81 +1755,81 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_6 = (i3_10 - r3_14);
 			      r2_14 = (r3_10 - i3_14);
 			      i2_14 = (i3_10 + r3_14);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_8 = (r2_0 - r2_2);
-			 i1_8 = (i2_0 - i2_2);
-			 tmpr = (0.707106781187 * (r2_6 + i2_6));
-			 tmpi = (0.707106781187 * (i2_6 - r2_6));
-			 r1_2 = (r2_4 + tmpr);
-			 i1_2 = (i2_4 + tmpi);
-			 r1_10 = (r2_4 - tmpr);
-			 i1_10 = (i2_4 - tmpi);
-			 r1_4 = (r2_8 + i2_10);
-			 i1_4 = (i2_8 - r2_10);
-			 r1_12 = (r2_8 - i2_10);
-			 i1_12 = (i2_8 + r2_10);
-			 tmpr = (0.707106781187 * (i2_14 - r2_14));
-			 tmpi = (0.707106781187 * (r2_14 + i2_14));
-			 r1_6 = (r2_12 + tmpr);
-			 i1_6 = (i2_12 - tmpi);
-			 r1_14 = (r2_12 - tmpr);
-			 i1_14 = (i2_12 + tmpi);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_8 = (r2_0 - r2_2);
+          i1_8 = (i2_0 - i2_2);
+          tmpr = (0.707106781187 * (r2_6 + i2_6));
+          tmpi = (0.707106781187 * (i2_6 - r2_6));
+          r1_2 = (r2_4 + tmpr);
+          i1_2 = (i2_4 + tmpi);
+          r1_10 = (r2_4 - tmpr);
+          i1_10 = (i2_4 - tmpi);
+          r1_4 = (r2_8 + i2_10);
+          i1_4 = (i2_8 - r2_10);
+          r1_12 = (r2_8 - i2_10);
+          i1_12 = (i2_8 + r2_10);
+          tmpr = (0.707106781187 * (i2_14 - r2_14));
+          tmpi = (0.707106781187 * (r2_14 + i2_14));
+          r1_6 = (r2_12 + tmpr);
+          i1_6 = (i2_12 - tmpi);
+          r1_14 = (r2_12 - tmpr);
+          i1_14 = (i2_12 + tmpi);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 REAL r2_9, i2_9;
-			 REAL r2_11, i2_11;
-			 REAL r2_13, i2_13;
-			 REAL r2_15, i2_15;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          REAL r2_9, i2_9;
+          REAL r2_11, i2_11;
+          REAL r2_13, i2_13;
+          REAL r2_15, i2_15;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      REAL r3_9, i3_9;
 			      REAL r3_13, i3_13;
 			      {
-				   REAL r4_1, i4_1;
-				   REAL r4_9, i4_9;
-				   wr = c_re(W[1 * l1]);
-				   wi = c_im(W[1 * l1]);
-				   tmpr = c_re(jp[1 * m]);
-				   tmpi = c_im(jp[1 * m]);
-				   r4_1 = ((wr * tmpr) - (wi * tmpi));
-				   i4_1 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[9 * l1]);
-				   wi = c_im(W[9 * l1]);
-				   tmpr = c_re(jp[9 * m]);
-				   tmpi = c_im(jp[9 * m]);
-				   r4_9 = ((wr * tmpr) - (wi * tmpi));
-				   i4_9 = ((wi * tmpr) + (wr * tmpi));
-				   r3_1 = (r4_1 + r4_9);
-				   i3_1 = (i4_1 + i4_9);
-				   r3_9 = (r4_1 - r4_9);
-				   i3_9 = (i4_1 - i4_9);
+              REAL r4_1, i4_1;
+              REAL r4_9, i4_9;
+              wr = c_re(W[1 * l1]);
+              wi = c_im(W[1 * l1]);
+              tmpr = c_re(jp[1 * m]);
+              tmpi = c_im(jp[1 * m]);
+              r4_1 = ((wr * tmpr) - (wi * tmpi));
+              i4_1 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[9 * l1]);
+              wi = c_im(W[9 * l1]);
+              tmpr = c_re(jp[9 * m]);
+              tmpi = c_im(jp[9 * m]);
+              r4_9 = ((wr * tmpr) - (wi * tmpi));
+              i4_9 = ((wi * tmpr) + (wr * tmpi));
+              r3_1 = (r4_1 + r4_9);
+              i3_1 = (i4_1 + i4_9);
+              r3_9 = (r4_1 - r4_9);
+              i3_9 = (i4_1 - i4_9);
 			      }
 			      {
-				   REAL r4_5, i4_5;
-				   REAL r4_13, i4_13;
-				   wr = c_re(W[5 * l1]);
-				   wi = c_im(W[5 * l1]);
-				   tmpr = c_re(jp[5 * m]);
-				   tmpi = c_im(jp[5 * m]);
-				   r4_5 = ((wr * tmpr) - (wi * tmpi));
-				   i4_5 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[13 * l1]);
-				   wi = c_im(W[13 * l1]);
-				   tmpr = c_re(jp[13 * m]);
-				   tmpi = c_im(jp[13 * m]);
-				   r4_13 = ((wr * tmpr) - (wi * tmpi));
-				   i4_13 = ((wi * tmpr) + (wr * tmpi));
-				   r3_5 = (r4_5 + r4_13);
-				   i3_5 = (i4_5 + i4_13);
-				   r3_13 = (r4_5 - r4_13);
-				   i3_13 = (i4_5 - i4_13);
+              REAL r4_5, i4_5;
+              REAL r4_13, i4_13;
+              wr = c_re(W[5 * l1]);
+              wi = c_im(W[5 * l1]);
+              tmpr = c_re(jp[5 * m]);
+              tmpi = c_im(jp[5 * m]);
+              r4_5 = ((wr * tmpr) - (wi * tmpi));
+              i4_5 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[13 * l1]);
+              wi = c_im(W[13 * l1]);
+              tmpr = c_re(jp[13 * m]);
+              tmpi = c_im(jp[13 * m]);
+              r4_13 = ((wr * tmpr) - (wi * tmpi));
+              i4_13 = ((wi * tmpr) + (wr * tmpi));
+              r3_5 = (r4_5 + r4_13);
+              i3_5 = (i4_5 + i4_13);
+              r3_13 = (r4_5 - r4_13);
+              i3_13 = (i4_5 - i4_13);
 			      }
 			      r2_1 = (r3_1 + r3_5);
 			      i2_1 = (i3_1 + i3_5);
@@ -1557,51 +1839,51 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_5 = (i3_9 - r3_13);
 			      r2_13 = (r3_9 - i3_13);
 			      i2_13 = (i3_9 + r3_13);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      REAL r3_11, i3_11;
 			      REAL r3_15, i3_15;
 			      {
-				   REAL r4_3, i4_3;
-				   REAL r4_11, i4_11;
-				   wr = c_re(W[3 * l1]);
-				   wi = c_im(W[3 * l1]);
-				   tmpr = c_re(jp[3 * m]);
-				   tmpi = c_im(jp[3 * m]);
-				   r4_3 = ((wr * tmpr) - (wi * tmpi));
-				   i4_3 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[11 * l1]);
-				   wi = c_im(W[11 * l1]);
-				   tmpr = c_re(jp[11 * m]);
-				   tmpi = c_im(jp[11 * m]);
-				   r4_11 = ((wr * tmpr) - (wi * tmpi));
-				   i4_11 = ((wi * tmpr) + (wr * tmpi));
-				   r3_3 = (r4_3 + r4_11);
-				   i3_3 = (i4_3 + i4_11);
-				   r3_11 = (r4_3 - r4_11);
-				   i3_11 = (i4_3 - i4_11);
+              REAL r4_3, i4_3;
+              REAL r4_11, i4_11;
+              wr = c_re(W[3 * l1]);
+              wi = c_im(W[3 * l1]);
+              tmpr = c_re(jp[3 * m]);
+              tmpi = c_im(jp[3 * m]);
+              r4_3 = ((wr * tmpr) - (wi * tmpi));
+              i4_3 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[11 * l1]);
+              wi = c_im(W[11 * l1]);
+              tmpr = c_re(jp[11 * m]);
+              tmpi = c_im(jp[11 * m]);
+              r4_11 = ((wr * tmpr) - (wi * tmpi));
+              i4_11 = ((wi * tmpr) + (wr * tmpi));
+              r3_3 = (r4_3 + r4_11);
+              i3_3 = (i4_3 + i4_11);
+              r3_11 = (r4_3 - r4_11);
+              i3_11 = (i4_3 - i4_11);
 			      }
 			      {
-				   REAL r4_7, i4_7;
-				   REAL r4_15, i4_15;
-				   wr = c_re(W[7 * l1]);
-				   wi = c_im(W[7 * l1]);
-				   tmpr = c_re(jp[7 * m]);
-				   tmpi = c_im(jp[7 * m]);
-				   r4_7 = ((wr * tmpr) - (wi * tmpi));
-				   i4_7 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[15 * l1]);
-				   wi = c_im(W[15 * l1]);
-				   tmpr = c_re(jp[15 * m]);
-				   tmpi = c_im(jp[15 * m]);
-				   r4_15 = ((wr * tmpr) - (wi * tmpi));
-				   i4_15 = ((wi * tmpr) + (wr * tmpi));
-				   r3_7 = (r4_7 + r4_15);
-				   i3_7 = (i4_7 + i4_15);
-				   r3_15 = (r4_7 - r4_15);
-				   i3_15 = (i4_7 - i4_15);
+              REAL r4_7, i4_7;
+              REAL r4_15, i4_15;
+              wr = c_re(W[7 * l1]);
+              wi = c_im(W[7 * l1]);
+              tmpr = c_re(jp[7 * m]);
+              tmpi = c_im(jp[7 * m]);
+              r4_7 = ((wr * tmpr) - (wi * tmpi));
+              i4_7 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[15 * l1]);
+              wi = c_im(W[15 * l1]);
+              tmpr = c_re(jp[15 * m]);
+              tmpi = c_im(jp[15 * m]);
+              r4_15 = ((wr * tmpr) - (wi * tmpi));
+              i4_15 = ((wi * tmpr) + (wr * tmpi));
+              r3_7 = (r4_7 + r4_15);
+              i3_7 = (i4_7 + i4_15);
+              r3_15 = (r4_7 - r4_15);
+              i3_15 = (i4_7 - i4_15);
 			      }
 			      r2_3 = (r3_3 + r3_7);
 			      i2_3 = (i3_3 + i3_7);
@@ -1611,27 +1893,27 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_7 = (i3_11 - r3_15);
 			      r2_15 = (r3_11 - i3_15);
 			      i2_15 = (i3_11 + r3_15);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_9 = (r2_1 - r2_3);
-			 i1_9 = (i2_1 - i2_3);
-			 tmpr = (0.707106781187 * (r2_7 + i2_7));
-			 tmpi = (0.707106781187 * (i2_7 - r2_7));
-			 r1_3 = (r2_5 + tmpr);
-			 i1_3 = (i2_5 + tmpi);
-			 r1_11 = (r2_5 - tmpr);
-			 i1_11 = (i2_5 - tmpi);
-			 r1_5 = (r2_9 + i2_11);
-			 i1_5 = (i2_9 - r2_11);
-			 r1_13 = (r2_9 - i2_11);
-			 i1_13 = (i2_9 + r2_11);
-			 tmpr = (0.707106781187 * (i2_15 - r2_15));
-			 tmpi = (0.707106781187 * (r2_15 + i2_15));
-			 r1_7 = (r2_13 + tmpr);
-			 i1_7 = (i2_13 - tmpi);
-			 r1_15 = (r2_13 - tmpr);
-			 i1_15 = (i2_13 + tmpi);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_9 = (r2_1 - r2_3);
+          i1_9 = (i2_1 - i2_3);
+          tmpr = (0.707106781187 * (r2_7 + i2_7));
+          tmpi = (0.707106781187 * (i2_7 - r2_7));
+          r1_3 = (r2_5 + tmpr);
+          i1_3 = (i2_5 + tmpi);
+          r1_11 = (r2_5 - tmpr);
+          i1_11 = (i2_5 - tmpi);
+          r1_5 = (r2_9 + i2_11);
+          i1_5 = (i2_9 - r2_11);
+          r1_13 = (r2_9 - i2_11);
+          i1_13 = (i2_9 + r2_11);
+          tmpr = (0.707106781187 * (i2_15 - r2_15));
+          tmpi = (0.707106781187 * (r2_15 + i2_15));
+          r1_7 = (r2_13 + tmpr);
+          i1_7 = (i2_13 - tmpi);
+          r1_15 = (r2_13 - tmpr);
+          i1_15 = (i2_13 + tmpi);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -1677,27 +1959,60 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 		    c_im(kp[7 * m]) = (i1_14 - tmpi);
 		    c_re(kp[15 * m]) = (r1_14 - tmpr);
 		    c_im(kp[15 * m]) = (i1_14 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_16,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_16(a, ab, in, out, W, nW, nWdn, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_16,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_16(ab, b, in, out, W, nW, nWdn, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -1715,54 +2030,54 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 		    REAL r1_14, i1_14;
 		    REAL r1_15, i1_15;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 REAL r2_8, i2_8;
-			 REAL r2_10, i2_10;
-			 REAL r2_12, i2_12;
-			 REAL r2_14, i2_14;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          REAL r2_8, i2_8;
+          REAL r2_10, i2_10;
+          REAL r2_12, i2_12;
+          REAL r2_14, i2_14;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      REAL r3_8, i3_8;
 			      REAL r3_12, i3_12;
 			      {
-				   REAL r4_0, i4_0;
-				   REAL r4_8, i4_8;
-				   r4_0 = c_re(jp[0 * m]);
-				   i4_0 = c_im(jp[0 * m]);
-				   wr = c_re(W[8 * l1]);
-				   wi = c_im(W[8 * l1]);
-				   tmpr = c_re(jp[8 * m]);
-				   tmpi = c_im(jp[8 * m]);
-				   r4_8 = ((wr * tmpr) - (wi * tmpi));
-				   i4_8 = ((wi * tmpr) + (wr * tmpi));
-				   r3_0 = (r4_0 + r4_8);
-				   i3_0 = (i4_0 + i4_8);
-				   r3_8 = (r4_0 - r4_8);
-				   i3_8 = (i4_0 - i4_8);
+              REAL r4_0, i4_0;
+              REAL r4_8, i4_8;
+              r4_0 = c_re(jp[0 * m]);
+              i4_0 = c_im(jp[0 * m]);
+              wr = c_re(W[8 * l1]);
+              wi = c_im(W[8 * l1]);
+              tmpr = c_re(jp[8 * m]);
+              tmpi = c_im(jp[8 * m]);
+              r4_8 = ((wr * tmpr) - (wi * tmpi));
+              i4_8 = ((wi * tmpr) + (wr * tmpi));
+              r3_0 = (r4_0 + r4_8);
+              i3_0 = (i4_0 + i4_8);
+              r3_8 = (r4_0 - r4_8);
+              i3_8 = (i4_0 - i4_8);
 			      }
 			      {
-				   REAL r4_4, i4_4;
-				   REAL r4_12, i4_12;
-				   wr = c_re(W[4 * l1]);
-				   wi = c_im(W[4 * l1]);
-				   tmpr = c_re(jp[4 * m]);
-				   tmpi = c_im(jp[4 * m]);
-				   r4_4 = ((wr * tmpr) - (wi * tmpi));
-				   i4_4 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[12 * l1]);
-				   wi = c_im(W[12 * l1]);
-				   tmpr = c_re(jp[12 * m]);
-				   tmpi = c_im(jp[12 * m]);
-				   r4_12 = ((wr * tmpr) - (wi * tmpi));
-				   i4_12 = ((wi * tmpr) + (wr * tmpi));
-				   r3_4 = (r4_4 + r4_12);
-				   i3_4 = (i4_4 + i4_12);
-				   r3_12 = (r4_4 - r4_12);
-				   i3_12 = (i4_4 - i4_12);
+              REAL r4_4, i4_4;
+              REAL r4_12, i4_12;
+              wr = c_re(W[4 * l1]);
+              wi = c_im(W[4 * l1]);
+              tmpr = c_re(jp[4 * m]);
+              tmpi = c_im(jp[4 * m]);
+              r4_4 = ((wr * tmpr) - (wi * tmpi));
+              i4_4 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[12 * l1]);
+              wi = c_im(W[12 * l1]);
+              tmpr = c_re(jp[12 * m]);
+              tmpi = c_im(jp[12 * m]);
+              r4_12 = ((wr * tmpr) - (wi * tmpi));
+              i4_12 = ((wi * tmpr) + (wr * tmpi));
+              r3_4 = (r4_4 + r4_12);
+              i3_4 = (i4_4 + i4_12);
+              r3_12 = (r4_4 - r4_12);
+              i3_12 = (i4_4 - i4_12);
 			      }
 			      r2_0 = (r3_0 + r3_4);
 			      i2_0 = (i3_0 + i3_4);
@@ -1772,51 +2087,51 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_4 = (i3_8 - r3_12);
 			      r2_12 = (r3_8 - i3_12);
 			      i2_12 = (i3_8 + r3_12);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      REAL r3_10, i3_10;
 			      REAL r3_14, i3_14;
 			      {
-				   REAL r4_2, i4_2;
-				   REAL r4_10, i4_10;
-				   wr = c_re(W[2 * l1]);
-				   wi = c_im(W[2 * l1]);
-				   tmpr = c_re(jp[2 * m]);
-				   tmpi = c_im(jp[2 * m]);
-				   r4_2 = ((wr * tmpr) - (wi * tmpi));
-				   i4_2 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[10 * l1]);
-				   wi = c_im(W[10 * l1]);
-				   tmpr = c_re(jp[10 * m]);
-				   tmpi = c_im(jp[10 * m]);
-				   r4_10 = ((wr * tmpr) - (wi * tmpi));
-				   i4_10 = ((wi * tmpr) + (wr * tmpi));
-				   r3_2 = (r4_2 + r4_10);
-				   i3_2 = (i4_2 + i4_10);
-				   r3_10 = (r4_2 - r4_10);
-				   i3_10 = (i4_2 - i4_10);
+              REAL r4_2, i4_2;
+              REAL r4_10, i4_10;
+              wr = c_re(W[2 * l1]);
+              wi = c_im(W[2 * l1]);
+              tmpr = c_re(jp[2 * m]);
+              tmpi = c_im(jp[2 * m]);
+              r4_2 = ((wr * tmpr) - (wi * tmpi));
+              i4_2 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[10 * l1]);
+              wi = c_im(W[10 * l1]);
+              tmpr = c_re(jp[10 * m]);
+              tmpi = c_im(jp[10 * m]);
+              r4_10 = ((wr * tmpr) - (wi * tmpi));
+              i4_10 = ((wi * tmpr) + (wr * tmpi));
+              r3_2 = (r4_2 + r4_10);
+              i3_2 = (i4_2 + i4_10);
+              r3_10 = (r4_2 - r4_10);
+              i3_10 = (i4_2 - i4_10);
 			      }
 			      {
-				   REAL r4_6, i4_6;
-				   REAL r4_14, i4_14;
-				   wr = c_re(W[6 * l1]);
-				   wi = c_im(W[6 * l1]);
-				   tmpr = c_re(jp[6 * m]);
-				   tmpi = c_im(jp[6 * m]);
-				   r4_6 = ((wr * tmpr) - (wi * tmpi));
-				   i4_6 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[14 * l1]);
-				   wi = c_im(W[14 * l1]);
-				   tmpr = c_re(jp[14 * m]);
-				   tmpi = c_im(jp[14 * m]);
-				   r4_14 = ((wr * tmpr) - (wi * tmpi));
-				   i4_14 = ((wi * tmpr) + (wr * tmpi));
-				   r3_6 = (r4_6 + r4_14);
-				   i3_6 = (i4_6 + i4_14);
-				   r3_14 = (r4_6 - r4_14);
-				   i3_14 = (i4_6 - i4_14);
+              REAL r4_6, i4_6;
+              REAL r4_14, i4_14;
+              wr = c_re(W[6 * l1]);
+              wi = c_im(W[6 * l1]);
+              tmpr = c_re(jp[6 * m]);
+              tmpi = c_im(jp[6 * m]);
+              r4_6 = ((wr * tmpr) - (wi * tmpi));
+              i4_6 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[14 * l1]);
+              wi = c_im(W[14 * l1]);
+              tmpr = c_re(jp[14 * m]);
+              tmpi = c_im(jp[14 * m]);
+              r4_14 = ((wr * tmpr) - (wi * tmpi));
+              i4_14 = ((wi * tmpr) + (wr * tmpi));
+              r3_6 = (r4_6 + r4_14);
+              i3_6 = (i4_6 + i4_14);
+              r3_14 = (r4_6 - r4_14);
+              i3_14 = (i4_6 - i4_14);
 			      }
 			      r2_2 = (r3_2 + r3_6);
 			      i2_2 = (i3_2 + i3_6);
@@ -1826,81 +2141,81 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_6 = (i3_10 - r3_14);
 			      r2_14 = (r3_10 - i3_14);
 			      i2_14 = (i3_10 + r3_14);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_8 = (r2_0 - r2_2);
-			 i1_8 = (i2_0 - i2_2);
-			 tmpr = (0.707106781187 * (r2_6 + i2_6));
-			 tmpi = (0.707106781187 * (i2_6 - r2_6));
-			 r1_2 = (r2_4 + tmpr);
-			 i1_2 = (i2_4 + tmpi);
-			 r1_10 = (r2_4 - tmpr);
-			 i1_10 = (i2_4 - tmpi);
-			 r1_4 = (r2_8 + i2_10);
-			 i1_4 = (i2_8 - r2_10);
-			 r1_12 = (r2_8 - i2_10);
-			 i1_12 = (i2_8 + r2_10);
-			 tmpr = (0.707106781187 * (i2_14 - r2_14));
-			 tmpi = (0.707106781187 * (r2_14 + i2_14));
-			 r1_6 = (r2_12 + tmpr);
-			 i1_6 = (i2_12 - tmpi);
-			 r1_14 = (r2_12 - tmpr);
-			 i1_14 = (i2_12 + tmpi);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_8 = (r2_0 - r2_2);
+          i1_8 = (i2_0 - i2_2);
+          tmpr = (0.707106781187 * (r2_6 + i2_6));
+          tmpi = (0.707106781187 * (i2_6 - r2_6));
+          r1_2 = (r2_4 + tmpr);
+          i1_2 = (i2_4 + tmpi);
+          r1_10 = (r2_4 - tmpr);
+          i1_10 = (i2_4 - tmpi);
+          r1_4 = (r2_8 + i2_10);
+          i1_4 = (i2_8 - r2_10);
+          r1_12 = (r2_8 - i2_10);
+          i1_12 = (i2_8 + r2_10);
+          tmpr = (0.707106781187 * (i2_14 - r2_14));
+          tmpi = (0.707106781187 * (r2_14 + i2_14));
+          r1_6 = (r2_12 + tmpr);
+          i1_6 = (i2_12 - tmpi);
+          r1_14 = (r2_12 - tmpr);
+          i1_14 = (i2_12 + tmpi);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 REAL r2_9, i2_9;
-			 REAL r2_11, i2_11;
-			 REAL r2_13, i2_13;
-			 REAL r2_15, i2_15;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          REAL r2_9, i2_9;
+          REAL r2_11, i2_11;
+          REAL r2_13, i2_13;
+          REAL r2_15, i2_15;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      REAL r3_9, i3_9;
 			      REAL r3_13, i3_13;
 			      {
-				   REAL r4_1, i4_1;
-				   REAL r4_9, i4_9;
-				   wr = c_re(W[1 * l1]);
-				   wi = c_im(W[1 * l1]);
-				   tmpr = c_re(jp[1 * m]);
-				   tmpi = c_im(jp[1 * m]);
-				   r4_1 = ((wr * tmpr) - (wi * tmpi));
-				   i4_1 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[9 * l1]);
-				   wi = c_im(W[9 * l1]);
-				   tmpr = c_re(jp[9 * m]);
-				   tmpi = c_im(jp[9 * m]);
-				   r4_9 = ((wr * tmpr) - (wi * tmpi));
-				   i4_9 = ((wi * tmpr) + (wr * tmpi));
-				   r3_1 = (r4_1 + r4_9);
-				   i3_1 = (i4_1 + i4_9);
-				   r3_9 = (r4_1 - r4_9);
-				   i3_9 = (i4_1 - i4_9);
+              REAL r4_1, i4_1;
+              REAL r4_9, i4_9;
+              wr = c_re(W[1 * l1]);
+              wi = c_im(W[1 * l1]);
+              tmpr = c_re(jp[1 * m]);
+              tmpi = c_im(jp[1 * m]);
+              r4_1 = ((wr * tmpr) - (wi * tmpi));
+              i4_1 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[9 * l1]);
+              wi = c_im(W[9 * l1]);
+              tmpr = c_re(jp[9 * m]);
+              tmpi = c_im(jp[9 * m]);
+              r4_9 = ((wr * tmpr) - (wi * tmpi));
+              i4_9 = ((wi * tmpr) + (wr * tmpi));
+              r3_1 = (r4_1 + r4_9);
+              i3_1 = (i4_1 + i4_9);
+              r3_9 = (r4_1 - r4_9);
+              i3_9 = (i4_1 - i4_9);
 			      }
 			      {
-				   REAL r4_5, i4_5;
-				   REAL r4_13, i4_13;
-				   wr = c_re(W[5 * l1]);
-				   wi = c_im(W[5 * l1]);
-				   tmpr = c_re(jp[5 * m]);
-				   tmpi = c_im(jp[5 * m]);
-				   r4_5 = ((wr * tmpr) - (wi * tmpi));
-				   i4_5 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[13 * l1]);
-				   wi = c_im(W[13 * l1]);
-				   tmpr = c_re(jp[13 * m]);
-				   tmpi = c_im(jp[13 * m]);
-				   r4_13 = ((wr * tmpr) - (wi * tmpi));
-				   i4_13 = ((wi * tmpr) + (wr * tmpi));
-				   r3_5 = (r4_5 + r4_13);
-				   i3_5 = (i4_5 + i4_13);
-				   r3_13 = (r4_5 - r4_13);
-				   i3_13 = (i4_5 - i4_13);
+              REAL r4_5, i4_5;
+              REAL r4_13, i4_13;
+              wr = c_re(W[5 * l1]);
+              wi = c_im(W[5 * l1]);
+              tmpr = c_re(jp[5 * m]);
+              tmpi = c_im(jp[5 * m]);
+              r4_5 = ((wr * tmpr) - (wi * tmpi));
+              i4_5 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[13 * l1]);
+              wi = c_im(W[13 * l1]);
+              tmpr = c_re(jp[13 * m]);
+              tmpi = c_im(jp[13 * m]);
+              r4_13 = ((wr * tmpr) - (wi * tmpi));
+              i4_13 = ((wi * tmpr) + (wr * tmpi));
+              r3_5 = (r4_5 + r4_13);
+              i3_5 = (i4_5 + i4_13);
+              r3_13 = (r4_5 - r4_13);
+              i3_13 = (i4_5 - i4_13);
 			      }
 			      r2_1 = (r3_1 + r3_5);
 			      i2_1 = (i3_1 + i3_5);
@@ -1910,51 +2225,51 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_5 = (i3_9 - r3_13);
 			      r2_13 = (r3_9 - i3_13);
 			      i2_13 = (i3_9 + r3_13);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      REAL r3_11, i3_11;
 			      REAL r3_15, i3_15;
 			      {
-				   REAL r4_3, i4_3;
-				   REAL r4_11, i4_11;
-				   wr = c_re(W[3 * l1]);
-				   wi = c_im(W[3 * l1]);
-				   tmpr = c_re(jp[3 * m]);
-				   tmpi = c_im(jp[3 * m]);
-				   r4_3 = ((wr * tmpr) - (wi * tmpi));
-				   i4_3 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[11 * l1]);
-				   wi = c_im(W[11 * l1]);
-				   tmpr = c_re(jp[11 * m]);
-				   tmpi = c_im(jp[11 * m]);
-				   r4_11 = ((wr * tmpr) - (wi * tmpi));
-				   i4_11 = ((wi * tmpr) + (wr * tmpi));
-				   r3_3 = (r4_3 + r4_11);
-				   i3_3 = (i4_3 + i4_11);
-				   r3_11 = (r4_3 - r4_11);
-				   i3_11 = (i4_3 - i4_11);
+              REAL r4_3, i4_3;
+              REAL r4_11, i4_11;
+              wr = c_re(W[3 * l1]);
+              wi = c_im(W[3 * l1]);
+              tmpr = c_re(jp[3 * m]);
+              tmpi = c_im(jp[3 * m]);
+              r4_3 = ((wr * tmpr) - (wi * tmpi));
+              i4_3 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[11 * l1]);
+              wi = c_im(W[11 * l1]);
+              tmpr = c_re(jp[11 * m]);
+              tmpi = c_im(jp[11 * m]);
+              r4_11 = ((wr * tmpr) - (wi * tmpi));
+              i4_11 = ((wi * tmpr) + (wr * tmpi));
+              r3_3 = (r4_3 + r4_11);
+              i3_3 = (i4_3 + i4_11);
+              r3_11 = (r4_3 - r4_11);
+              i3_11 = (i4_3 - i4_11);
 			      }
 			      {
-				   REAL r4_7, i4_7;
-				   REAL r4_15, i4_15;
-				   wr = c_re(W[7 * l1]);
-				   wi = c_im(W[7 * l1]);
-				   tmpr = c_re(jp[7 * m]);
-				   tmpi = c_im(jp[7 * m]);
-				   r4_7 = ((wr * tmpr) - (wi * tmpi));
-				   i4_7 = ((wi * tmpr) + (wr * tmpi));
-				   wr = c_re(W[15 * l1]);
-				   wi = c_im(W[15 * l1]);
-				   tmpr = c_re(jp[15 * m]);
-				   tmpi = c_im(jp[15 * m]);
-				   r4_15 = ((wr * tmpr) - (wi * tmpi));
-				   i4_15 = ((wi * tmpr) + (wr * tmpi));
-				   r3_7 = (r4_7 + r4_15);
-				   i3_7 = (i4_7 + i4_15);
-				   r3_15 = (r4_7 - r4_15);
-				   i3_15 = (i4_7 - i4_15);
+              REAL r4_7, i4_7;
+              REAL r4_15, i4_15;
+              wr = c_re(W[7 * l1]);
+              wi = c_im(W[7 * l1]);
+              tmpr = c_re(jp[7 * m]);
+              tmpi = c_im(jp[7 * m]);
+              r4_7 = ((wr * tmpr) - (wi * tmpi));
+              i4_7 = ((wi * tmpr) + (wr * tmpi));
+              wr = c_re(W[15 * l1]);
+              wi = c_im(W[15 * l1]);
+              tmpr = c_re(jp[15 * m]);
+              tmpi = c_im(jp[15 * m]);
+              r4_15 = ((wr * tmpr) - (wi * tmpi));
+              i4_15 = ((wi * tmpr) + (wr * tmpi));
+              r3_7 = (r4_7 + r4_15);
+              i3_7 = (i4_7 + i4_15);
+              r3_15 = (r4_7 - r4_15);
+              i3_15 = (i4_7 - i4_15);
 			      }
 			      r2_3 = (r3_3 + r3_7);
 			      i2_3 = (i3_3 + i3_7);
@@ -1964,27 +2279,27 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_7 = (i3_11 - r3_15);
 			      r2_15 = (r3_11 - i3_15);
 			      i2_15 = (i3_11 + r3_15);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_9 = (r2_1 - r2_3);
-			 i1_9 = (i2_1 - i2_3);
-			 tmpr = (0.707106781187 * (r2_7 + i2_7));
-			 tmpi = (0.707106781187 * (i2_7 - r2_7));
-			 r1_3 = (r2_5 + tmpr);
-			 i1_3 = (i2_5 + tmpi);
-			 r1_11 = (r2_5 - tmpr);
-			 i1_11 = (i2_5 - tmpi);
-			 r1_5 = (r2_9 + i2_11);
-			 i1_5 = (i2_9 - r2_11);
-			 r1_13 = (r2_9 - i2_11);
-			 i1_13 = (i2_9 + r2_11);
-			 tmpr = (0.707106781187 * (i2_15 - r2_15));
-			 tmpi = (0.707106781187 * (r2_15 + i2_15));
-			 r1_7 = (r2_13 + tmpr);
-			 i1_7 = (i2_13 - tmpi);
-			 r1_15 = (r2_13 - tmpr);
-			 i1_15 = (i2_13 + tmpi);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_9 = (r2_1 - r2_3);
+          i1_9 = (i2_1 - i2_3);
+          tmpr = (0.707106781187 * (r2_7 + i2_7));
+          tmpi = (0.707106781187 * (i2_7 - r2_7));
+          r1_3 = (r2_5 + tmpr);
+          i1_3 = (i2_5 + tmpi);
+          r1_11 = (r2_5 - tmpr);
+          i1_11 = (i2_5 - tmpi);
+          r1_5 = (r2_9 + i2_11);
+          i1_5 = (i2_9 - r2_11);
+          r1_13 = (r2_9 - i2_11);
+          i1_13 = (i2_9 + r2_11);
+          tmpr = (0.707106781187 * (i2_15 - r2_15));
+          tmpi = (0.707106781187 * (r2_15 + i2_15));
+          r1_7 = (r2_13 + tmpr);
+          i1_7 = (i2_13 - tmpi);
+          r1_15 = (r2_13 - tmpr);
+          i1_15 = (i2_13 + tmpi);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -2030,115 +2345,142 @@ void fft_twiddle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 		    c_im(kp[7 * m]) = (i1_14 - tmpi);
 		    c_re(kp[15 * m]) = (r1_14 - tmpr);
 		    c_im(kp[15 * m]) = (i1_14 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_twiddle_16_seq(a, ab, in, out, W, nW, nWdn, m);
 	  fft_twiddle_16_seq(ab, b, in, out, W, nW, nWdn, m);
-     }
+  }
 }
 void fft_unshuffle_16(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 16;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_16,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_16(a, ab, in, out, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_16,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_16(ab, b, in, out, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_unshuffle_16_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 16;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_unshuffle_16_seq(a, ab, in, out, m);
 	  fft_unshuffle_16_seq(ab, b, in, out, m);
-     }
+  }
 }
 void fft_base_32(COMPLEX * in, COMPLEX * out)
 {
-     REAL tmpr, tmpi;
-     {
+  REAL tmpr, tmpi;
+  {
 	  REAL r1_0, i1_0;
 	  REAL r1_1, i1_1;
 	  REAL r1_2, i1_2;
@@ -2172,23 +2514,23 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 	  REAL r1_30, i1_30;
 	  REAL r1_31, i1_31;
 	  {
-	       REAL r2_0, i2_0;
-	       REAL r2_2, i2_2;
-	       REAL r2_4, i2_4;
-	       REAL r2_6, i2_6;
-	       REAL r2_8, i2_8;
-	       REAL r2_10, i2_10;
-	       REAL r2_12, i2_12;
-	       REAL r2_14, i2_14;
-	       REAL r2_16, i2_16;
-	       REAL r2_18, i2_18;
-	       REAL r2_20, i2_20;
-	       REAL r2_22, i2_22;
-	       REAL r2_24, i2_24;
-	       REAL r2_26, i2_26;
-	       REAL r2_28, i2_28;
-	       REAL r2_30, i2_30;
-	       {
+      REAL r2_0, i2_0;
+      REAL r2_2, i2_2;
+      REAL r2_4, i2_4;
+      REAL r2_6, i2_6;
+      REAL r2_8, i2_8;
+      REAL r2_10, i2_10;
+      REAL r2_12, i2_12;
+      REAL r2_14, i2_14;
+      REAL r2_16, i2_16;
+      REAL r2_18, i2_18;
+      REAL r2_20, i2_20;
+      REAL r2_22, i2_22;
+      REAL r2_24, i2_24;
+      REAL r2_26, i2_26;
+      REAL r2_28, i2_28;
+      REAL r2_30, i2_30;
+      {
 		    REAL r3_0, i3_0;
 		    REAL r3_4, i3_4;
 		    REAL r3_8, i3_8;
@@ -2198,11 +2540,11 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    REAL r3_24, i3_24;
 		    REAL r3_28, i3_28;
 		    {
-			 REAL r4_0, i4_0;
-			 REAL r4_8, i4_8;
-			 REAL r4_16, i4_16;
-			 REAL r4_24, i4_24;
-			 {
+          REAL r4_0, i4_0;
+          REAL r4_8, i4_8;
+          REAL r4_16, i4_16;
+          REAL r4_24, i4_24;
+          {
 			      REAL r5_0, i5_0;
 			      REAL r5_16, i5_16;
 			      r5_0 = c_re(in[0]);
@@ -2213,8 +2555,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_0 = (i5_0 + i5_16);
 			      r4_16 = (r5_0 - r5_16);
 			      i4_16 = (i5_0 - i5_16);
-			 }
-			 {
+          }
+          {
 			      REAL r5_8, i5_8;
 			      REAL r5_24, i5_24;
 			      r5_8 = c_re(in[8]);
@@ -2225,22 +2567,22 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_8 = (i5_8 + i5_24);
 			      r4_24 = (r5_8 - r5_24);
 			      i4_24 = (i5_8 - i5_24);
-			 }
-			 r3_0 = (r4_0 + r4_8);
-			 i3_0 = (i4_0 + i4_8);
-			 r3_16 = (r4_0 - r4_8);
-			 i3_16 = (i4_0 - i4_8);
-			 r3_8 = (r4_16 + i4_24);
-			 i3_8 = (i4_16 - r4_24);
-			 r3_24 = (r4_16 - i4_24);
-			 i3_24 = (i4_16 + r4_24);
+          }
+          r3_0 = (r4_0 + r4_8);
+          i3_0 = (i4_0 + i4_8);
+          r3_16 = (r4_0 - r4_8);
+          i3_16 = (i4_0 - i4_8);
+          r3_8 = (r4_16 + i4_24);
+          i3_8 = (i4_16 - r4_24);
+          r3_24 = (r4_16 - i4_24);
+          i3_24 = (i4_16 + r4_24);
 		    }
 		    {
-			 REAL r4_4, i4_4;
-			 REAL r4_12, i4_12;
-			 REAL r4_20, i4_20;
-			 REAL r4_28, i4_28;
-			 {
+          REAL r4_4, i4_4;
+          REAL r4_12, i4_12;
+          REAL r4_20, i4_20;
+          REAL r4_28, i4_28;
+          {
 			      REAL r5_4, i5_4;
 			      REAL r5_20, i5_20;
 			      r5_4 = c_re(in[4]);
@@ -2251,8 +2593,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_4 = (i5_4 + i5_20);
 			      r4_20 = (r5_4 - r5_20);
 			      i4_20 = (i5_4 - i5_20);
-			 }
-			 {
+          }
+          {
 			      REAL r5_12, i5_12;
 			      REAL r5_28, i5_28;
 			      r5_12 = c_re(in[12]);
@@ -2263,15 +2605,15 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_12 = (i5_12 + i5_28);
 			      r4_28 = (r5_12 - r5_28);
 			      i4_28 = (i5_12 - i5_28);
-			 }
-			 r3_4 = (r4_4 + r4_12);
-			 i3_4 = (i4_4 + i4_12);
-			 r3_20 = (r4_4 - r4_12);
-			 i3_20 = (i4_4 - i4_12);
-			 r3_12 = (r4_20 + i4_28);
-			 i3_12 = (i4_20 - r4_28);
-			 r3_28 = (r4_20 - i4_28);
-			 i3_28 = (i4_20 + r4_28);
+          }
+          r3_4 = (r4_4 + r4_12);
+          i3_4 = (i4_4 + i4_12);
+          r3_20 = (r4_4 - r4_12);
+          i3_20 = (i4_4 - i4_12);
+          r3_12 = (r4_20 + i4_28);
+          i3_12 = (i4_20 - r4_28);
+          r3_28 = (r4_20 - i4_28);
+          i3_28 = (i4_20 + r4_28);
 		    }
 		    r2_0 = (r3_0 + r3_4);
 		    i2_0 = (i3_0 + i3_4);
@@ -2293,8 +2635,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    i2_12 = (i3_24 - tmpi);
 		    r2_28 = (r3_24 - tmpr);
 		    i2_28 = (i3_24 + tmpi);
-	       }
-	       {
+      }
+      {
 		    REAL r3_2, i3_2;
 		    REAL r3_6, i3_6;
 		    REAL r3_10, i3_10;
@@ -2304,11 +2646,11 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    REAL r3_26, i3_26;
 		    REAL r3_30, i3_30;
 		    {
-			 REAL r4_2, i4_2;
-			 REAL r4_10, i4_10;
-			 REAL r4_18, i4_18;
-			 REAL r4_26, i4_26;
-			 {
+          REAL r4_2, i4_2;
+          REAL r4_10, i4_10;
+          REAL r4_18, i4_18;
+          REAL r4_26, i4_26;
+          {
 			      REAL r5_2, i5_2;
 			      REAL r5_18, i5_18;
 			      r5_2 = c_re(in[2]);
@@ -2319,8 +2661,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_2 = (i5_2 + i5_18);
 			      r4_18 = (r5_2 - r5_18);
 			      i4_18 = (i5_2 - i5_18);
-			 }
-			 {
+          }
+          {
 			      REAL r5_10, i5_10;
 			      REAL r5_26, i5_26;
 			      r5_10 = c_re(in[10]);
@@ -2331,22 +2673,22 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_10 = (i5_10 + i5_26);
 			      r4_26 = (r5_10 - r5_26);
 			      i4_26 = (i5_10 - i5_26);
-			 }
-			 r3_2 = (r4_2 + r4_10);
-			 i3_2 = (i4_2 + i4_10);
-			 r3_18 = (r4_2 - r4_10);
-			 i3_18 = (i4_2 - i4_10);
-			 r3_10 = (r4_18 + i4_26);
-			 i3_10 = (i4_18 - r4_26);
-			 r3_26 = (r4_18 - i4_26);
-			 i3_26 = (i4_18 + r4_26);
+          }
+          r3_2 = (r4_2 + r4_10);
+          i3_2 = (i4_2 + i4_10);
+          r3_18 = (r4_2 - r4_10);
+          i3_18 = (i4_2 - i4_10);
+          r3_10 = (r4_18 + i4_26);
+          i3_10 = (i4_18 - r4_26);
+          r3_26 = (r4_18 - i4_26);
+          i3_26 = (i4_18 + r4_26);
 		    }
 		    {
-			 REAL r4_6, i4_6;
-			 REAL r4_14, i4_14;
-			 REAL r4_22, i4_22;
-			 REAL r4_30, i4_30;
-			 {
+          REAL r4_6, i4_6;
+          REAL r4_14, i4_14;
+          REAL r4_22, i4_22;
+          REAL r4_30, i4_30;
+          {
 			      REAL r5_6, i5_6;
 			      REAL r5_22, i5_22;
 			      r5_6 = c_re(in[6]);
@@ -2357,8 +2699,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_6 = (i5_6 + i5_22);
 			      r4_22 = (r5_6 - r5_22);
 			      i4_22 = (i5_6 - i5_22);
-			 }
-			 {
+          }
+          {
 			      REAL r5_14, i5_14;
 			      REAL r5_30, i5_30;
 			      r5_14 = c_re(in[14]);
@@ -2369,15 +2711,15 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_14 = (i5_14 + i5_30);
 			      r4_30 = (r5_14 - r5_30);
 			      i4_30 = (i5_14 - i5_30);
-			 }
-			 r3_6 = (r4_6 + r4_14);
-			 i3_6 = (i4_6 + i4_14);
-			 r3_22 = (r4_6 - r4_14);
-			 i3_22 = (i4_6 - i4_14);
-			 r3_14 = (r4_22 + i4_30);
-			 i3_14 = (i4_22 - r4_30);
-			 r3_30 = (r4_22 - i4_30);
-			 i3_30 = (i4_22 + r4_30);
+          }
+          r3_6 = (r4_6 + r4_14);
+          i3_6 = (i4_6 + i4_14);
+          r3_22 = (r4_6 - r4_14);
+          i3_22 = (i4_6 - i4_14);
+          r3_14 = (r4_22 + i4_30);
+          i3_14 = (i4_22 - r4_30);
+          r3_30 = (r4_22 - i4_30);
+          i3_30 = (i4_22 + r4_30);
 		    }
 		    r2_2 = (r3_2 + r3_6);
 		    i2_2 = (i3_2 + i3_6);
@@ -2399,70 +2741,70 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    i2_14 = (i3_26 - tmpi);
 		    r2_30 = (r3_26 - tmpr);
 		    i2_30 = (i3_26 + tmpi);
-	       }
-	       r1_0 = (r2_0 + r2_2);
-	       i1_0 = (i2_0 + i2_2);
-	       r1_16 = (r2_0 - r2_2);
-	       i1_16 = (i2_0 - i2_2);
-	       tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
-	       tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
-	       r1_2 = (r2_4 + tmpr);
-	       i1_2 = (i2_4 + tmpi);
-	       r1_18 = (r2_4 - tmpr);
-	       i1_18 = (i2_4 - tmpi);
-	       tmpr = (0.707106781187 * (r2_10 + i2_10));
-	       tmpi = (0.707106781187 * (i2_10 - r2_10));
-	       r1_4 = (r2_8 + tmpr);
-	       i1_4 = (i2_8 + tmpi);
-	       r1_20 = (r2_8 - tmpr);
-	       i1_20 = (i2_8 - tmpi);
-	       tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
-	       tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
-	       r1_6 = (r2_12 + tmpr);
-	       i1_6 = (i2_12 + tmpi);
-	       r1_22 = (r2_12 - tmpr);
-	       i1_22 = (i2_12 - tmpi);
-	       r1_8 = (r2_16 + i2_18);
-	       i1_8 = (i2_16 - r2_18);
-	       r1_24 = (r2_16 - i2_18);
-	       i1_24 = (i2_16 + r2_18);
-	       tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
-	       tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
-	       r1_10 = (r2_20 + tmpr);
-	       i1_10 = (i2_20 - tmpi);
-	       r1_26 = (r2_20 - tmpr);
-	       i1_26 = (i2_20 + tmpi);
-	       tmpr = (0.707106781187 * (i2_26 - r2_26));
-	       tmpi = (0.707106781187 * (r2_26 + i2_26));
-	       r1_12 = (r2_24 + tmpr);
-	       i1_12 = (i2_24 - tmpi);
-	       r1_28 = (r2_24 - tmpr);
-	       i1_28 = (i2_24 + tmpi);
-	       tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
-	       tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
-	       r1_14 = (r2_28 + tmpr);
-	       i1_14 = (i2_28 - tmpi);
-	       r1_30 = (r2_28 - tmpr);
-	       i1_30 = (i2_28 + tmpi);
+      }
+      r1_0 = (r2_0 + r2_2);
+      i1_0 = (i2_0 + i2_2);
+      r1_16 = (r2_0 - r2_2);
+      i1_16 = (i2_0 - i2_2);
+      tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
+      tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
+      r1_2 = (r2_4 + tmpr);
+      i1_2 = (i2_4 + tmpi);
+      r1_18 = (r2_4 - tmpr);
+      i1_18 = (i2_4 - tmpi);
+      tmpr = (0.707106781187 * (r2_10 + i2_10));
+      tmpi = (0.707106781187 * (i2_10 - r2_10));
+      r1_4 = (r2_8 + tmpr);
+      i1_4 = (i2_8 + tmpi);
+      r1_20 = (r2_8 - tmpr);
+      i1_20 = (i2_8 - tmpi);
+      tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
+      tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
+      r1_6 = (r2_12 + tmpr);
+      i1_6 = (i2_12 + tmpi);
+      r1_22 = (r2_12 - tmpr);
+      i1_22 = (i2_12 - tmpi);
+      r1_8 = (r2_16 + i2_18);
+      i1_8 = (i2_16 - r2_18);
+      r1_24 = (r2_16 - i2_18);
+      i1_24 = (i2_16 + r2_18);
+      tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
+      tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
+      r1_10 = (r2_20 + tmpr);
+      i1_10 = (i2_20 - tmpi);
+      r1_26 = (r2_20 - tmpr);
+      i1_26 = (i2_20 + tmpi);
+      tmpr = (0.707106781187 * (i2_26 - r2_26));
+      tmpi = (0.707106781187 * (r2_26 + i2_26));
+      r1_12 = (r2_24 + tmpr);
+      i1_12 = (i2_24 - tmpi);
+      r1_28 = (r2_24 - tmpr);
+      i1_28 = (i2_24 + tmpi);
+      tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
+      tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
+      r1_14 = (r2_28 + tmpr);
+      i1_14 = (i2_28 - tmpi);
+      r1_30 = (r2_28 - tmpr);
+      i1_30 = (i2_28 + tmpi);
 	  }
 	  {
-	       REAL r2_1, i2_1;
-	       REAL r2_3, i2_3;
-	       REAL r2_5, i2_5;
-	       REAL r2_7, i2_7;
-	       REAL r2_9, i2_9;
-	       REAL r2_11, i2_11;
-	       REAL r2_13, i2_13;
-	       REAL r2_15, i2_15;
-	       REAL r2_17, i2_17;
-	       REAL r2_19, i2_19;
-	       REAL r2_21, i2_21;
-	       REAL r2_23, i2_23;
-	       REAL r2_25, i2_25;
-	       REAL r2_27, i2_27;
-	       REAL r2_29, i2_29;
-	       REAL r2_31, i2_31;
-	       {
+      REAL r2_1, i2_1;
+      REAL r2_3, i2_3;
+      REAL r2_5, i2_5;
+      REAL r2_7, i2_7;
+      REAL r2_9, i2_9;
+      REAL r2_11, i2_11;
+      REAL r2_13, i2_13;
+      REAL r2_15, i2_15;
+      REAL r2_17, i2_17;
+      REAL r2_19, i2_19;
+      REAL r2_21, i2_21;
+      REAL r2_23, i2_23;
+      REAL r2_25, i2_25;
+      REAL r2_27, i2_27;
+      REAL r2_29, i2_29;
+      REAL r2_31, i2_31;
+      {
 		    REAL r3_1, i3_1;
 		    REAL r3_5, i3_5;
 		    REAL r3_9, i3_9;
@@ -2472,11 +2814,11 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    REAL r3_25, i3_25;
 		    REAL r3_29, i3_29;
 		    {
-			 REAL r4_1, i4_1;
-			 REAL r4_9, i4_9;
-			 REAL r4_17, i4_17;
-			 REAL r4_25, i4_25;
-			 {
+          REAL r4_1, i4_1;
+          REAL r4_9, i4_9;
+          REAL r4_17, i4_17;
+          REAL r4_25, i4_25;
+          {
 			      REAL r5_1, i5_1;
 			      REAL r5_17, i5_17;
 			      r5_1 = c_re(in[1]);
@@ -2487,8 +2829,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_1 = (i5_1 + i5_17);
 			      r4_17 = (r5_1 - r5_17);
 			      i4_17 = (i5_1 - i5_17);
-			 }
-			 {
+          }
+          {
 			      REAL r5_9, i5_9;
 			      REAL r5_25, i5_25;
 			      r5_9 = c_re(in[9]);
@@ -2499,22 +2841,22 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_9 = (i5_9 + i5_25);
 			      r4_25 = (r5_9 - r5_25);
 			      i4_25 = (i5_9 - i5_25);
-			 }
-			 r3_1 = (r4_1 + r4_9);
-			 i3_1 = (i4_1 + i4_9);
-			 r3_17 = (r4_1 - r4_9);
-			 i3_17 = (i4_1 - i4_9);
-			 r3_9 = (r4_17 + i4_25);
-			 i3_9 = (i4_17 - r4_25);
-			 r3_25 = (r4_17 - i4_25);
-			 i3_25 = (i4_17 + r4_25);
+          }
+          r3_1 = (r4_1 + r4_9);
+          i3_1 = (i4_1 + i4_9);
+          r3_17 = (r4_1 - r4_9);
+          i3_17 = (i4_1 - i4_9);
+          r3_9 = (r4_17 + i4_25);
+          i3_9 = (i4_17 - r4_25);
+          r3_25 = (r4_17 - i4_25);
+          i3_25 = (i4_17 + r4_25);
 		    }
 		    {
-			 REAL r4_5, i4_5;
-			 REAL r4_13, i4_13;
-			 REAL r4_21, i4_21;
-			 REAL r4_29, i4_29;
-			 {
+          REAL r4_5, i4_5;
+          REAL r4_13, i4_13;
+          REAL r4_21, i4_21;
+          REAL r4_29, i4_29;
+          {
 			      REAL r5_5, i5_5;
 			      REAL r5_21, i5_21;
 			      r5_5 = c_re(in[5]);
@@ -2525,8 +2867,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_5 = (i5_5 + i5_21);
 			      r4_21 = (r5_5 - r5_21);
 			      i4_21 = (i5_5 - i5_21);
-			 }
-			 {
+          }
+          {
 			      REAL r5_13, i5_13;
 			      REAL r5_29, i5_29;
 			      r5_13 = c_re(in[13]);
@@ -2537,15 +2879,15 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_13 = (i5_13 + i5_29);
 			      r4_29 = (r5_13 - r5_29);
 			      i4_29 = (i5_13 - i5_29);
-			 }
-			 r3_5 = (r4_5 + r4_13);
-			 i3_5 = (i4_5 + i4_13);
-			 r3_21 = (r4_5 - r4_13);
-			 i3_21 = (i4_5 - i4_13);
-			 r3_13 = (r4_21 + i4_29);
-			 i3_13 = (i4_21 - r4_29);
-			 r3_29 = (r4_21 - i4_29);
-			 i3_29 = (i4_21 + r4_29);
+          }
+          r3_5 = (r4_5 + r4_13);
+          i3_5 = (i4_5 + i4_13);
+          r3_21 = (r4_5 - r4_13);
+          i3_21 = (i4_5 - i4_13);
+          r3_13 = (r4_21 + i4_29);
+          i3_13 = (i4_21 - r4_29);
+          r3_29 = (r4_21 - i4_29);
+          i3_29 = (i4_21 + r4_29);
 		    }
 		    r2_1 = (r3_1 + r3_5);
 		    i2_1 = (i3_1 + i3_5);
@@ -2567,8 +2909,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    i2_13 = (i3_25 - tmpi);
 		    r2_29 = (r3_25 - tmpr);
 		    i2_29 = (i3_25 + tmpi);
-	       }
-	       {
+      }
+      {
 		    REAL r3_3, i3_3;
 		    REAL r3_7, i3_7;
 		    REAL r3_11, i3_11;
@@ -2578,11 +2920,11 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    REAL r3_27, i3_27;
 		    REAL r3_31, i3_31;
 		    {
-			 REAL r4_3, i4_3;
-			 REAL r4_11, i4_11;
-			 REAL r4_19, i4_19;
-			 REAL r4_27, i4_27;
-			 {
+          REAL r4_3, i4_3;
+          REAL r4_11, i4_11;
+          REAL r4_19, i4_19;
+          REAL r4_27, i4_27;
+          {
 			      REAL r5_3, i5_3;
 			      REAL r5_19, i5_19;
 			      r5_3 = c_re(in[3]);
@@ -2593,8 +2935,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_3 = (i5_3 + i5_19);
 			      r4_19 = (r5_3 - r5_19);
 			      i4_19 = (i5_3 - i5_19);
-			 }
-			 {
+          }
+          {
 			      REAL r5_11, i5_11;
 			      REAL r5_27, i5_27;
 			      r5_11 = c_re(in[11]);
@@ -2605,22 +2947,22 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_11 = (i5_11 + i5_27);
 			      r4_27 = (r5_11 - r5_27);
 			      i4_27 = (i5_11 - i5_27);
-			 }
-			 r3_3 = (r4_3 + r4_11);
-			 i3_3 = (i4_3 + i4_11);
-			 r3_19 = (r4_3 - r4_11);
-			 i3_19 = (i4_3 - i4_11);
-			 r3_11 = (r4_19 + i4_27);
-			 i3_11 = (i4_19 - r4_27);
-			 r3_27 = (r4_19 - i4_27);
-			 i3_27 = (i4_19 + r4_27);
+          }
+          r3_3 = (r4_3 + r4_11);
+          i3_3 = (i4_3 + i4_11);
+          r3_19 = (r4_3 - r4_11);
+          i3_19 = (i4_3 - i4_11);
+          r3_11 = (r4_19 + i4_27);
+          i3_11 = (i4_19 - r4_27);
+          r3_27 = (r4_19 - i4_27);
+          i3_27 = (i4_19 + r4_27);
 		    }
 		    {
-			 REAL r4_7, i4_7;
-			 REAL r4_15, i4_15;
-			 REAL r4_23, i4_23;
-			 REAL r4_31, i4_31;
-			 {
+          REAL r4_7, i4_7;
+          REAL r4_15, i4_15;
+          REAL r4_23, i4_23;
+          REAL r4_31, i4_31;
+          {
 			      REAL r5_7, i5_7;
 			      REAL r5_23, i5_23;
 			      r5_7 = c_re(in[7]);
@@ -2631,8 +2973,8 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_7 = (i5_7 + i5_23);
 			      r4_23 = (r5_7 - r5_23);
 			      i4_23 = (i5_7 - i5_23);
-			 }
-			 {
+          }
+          {
 			      REAL r5_15, i5_15;
 			      REAL r5_31, i5_31;
 			      r5_15 = c_re(in[15]);
@@ -2643,15 +2985,15 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 			      i4_15 = (i5_15 + i5_31);
 			      r4_31 = (r5_15 - r5_31);
 			      i4_31 = (i5_15 - i5_31);
-			 }
-			 r3_7 = (r4_7 + r4_15);
-			 i3_7 = (i4_7 + i4_15);
-			 r3_23 = (r4_7 - r4_15);
-			 i3_23 = (i4_7 - i4_15);
-			 r3_15 = (r4_23 + i4_31);
-			 i3_15 = (i4_23 - r4_31);
-			 r3_31 = (r4_23 - i4_31);
-			 i3_31 = (i4_23 + r4_31);
+          }
+          r3_7 = (r4_7 + r4_15);
+          i3_7 = (i4_7 + i4_15);
+          r3_23 = (r4_7 - r4_15);
+          i3_23 = (i4_7 - i4_15);
+          r3_15 = (r4_23 + i4_31);
+          i3_15 = (i4_23 - r4_31);
+          r3_31 = (r4_23 - i4_31);
+          i3_31 = (i4_23 + r4_31);
 		    }
 		    r2_3 = (r3_3 + r3_7);
 		    i2_3 = (i3_3 + i3_7);
@@ -2673,51 +3015,51 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 		    i2_15 = (i3_27 - tmpi);
 		    r2_31 = (r3_27 - tmpr);
 		    i2_31 = (i3_27 + tmpi);
-	       }
-	       r1_1 = (r2_1 + r2_3);
-	       i1_1 = (i2_1 + i2_3);
-	       r1_17 = (r2_1 - r2_3);
-	       i1_17 = (i2_1 - i2_3);
-	       tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
-	       tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
-	       r1_3 = (r2_5 + tmpr);
-	       i1_3 = (i2_5 + tmpi);
-	       r1_19 = (r2_5 - tmpr);
-	       i1_19 = (i2_5 - tmpi);
-	       tmpr = (0.707106781187 * (r2_11 + i2_11));
-	       tmpi = (0.707106781187 * (i2_11 - r2_11));
-	       r1_5 = (r2_9 + tmpr);
-	       i1_5 = (i2_9 + tmpi);
-	       r1_21 = (r2_9 - tmpr);
-	       i1_21 = (i2_9 - tmpi);
-	       tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
-	       tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
-	       r1_7 = (r2_13 + tmpr);
-	       i1_7 = (i2_13 + tmpi);
-	       r1_23 = (r2_13 - tmpr);
-	       i1_23 = (i2_13 - tmpi);
-	       r1_9 = (r2_17 + i2_19);
-	       i1_9 = (i2_17 - r2_19);
-	       r1_25 = (r2_17 - i2_19);
-	       i1_25 = (i2_17 + r2_19);
-	       tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
-	       tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
-	       r1_11 = (r2_21 + tmpr);
-	       i1_11 = (i2_21 - tmpi);
-	       r1_27 = (r2_21 - tmpr);
-	       i1_27 = (i2_21 + tmpi);
-	       tmpr = (0.707106781187 * (i2_27 - r2_27));
-	       tmpi = (0.707106781187 * (r2_27 + i2_27));
-	       r1_13 = (r2_25 + tmpr);
-	       i1_13 = (i2_25 - tmpi);
-	       r1_29 = (r2_25 - tmpr);
-	       i1_29 = (i2_25 + tmpi);
-	       tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
-	       tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
-	       r1_15 = (r2_29 + tmpr);
-	       i1_15 = (i2_29 - tmpi);
-	       r1_31 = (r2_29 - tmpr);
-	       i1_31 = (i2_29 + tmpi);
+      }
+      r1_1 = (r2_1 + r2_3);
+      i1_1 = (i2_1 + i2_3);
+      r1_17 = (r2_1 - r2_3);
+      i1_17 = (i2_1 - i2_3);
+      tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
+      tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
+      r1_3 = (r2_5 + tmpr);
+      i1_3 = (i2_5 + tmpi);
+      r1_19 = (r2_5 - tmpr);
+      i1_19 = (i2_5 - tmpi);
+      tmpr = (0.707106781187 * (r2_11 + i2_11));
+      tmpi = (0.707106781187 * (i2_11 - r2_11));
+      r1_5 = (r2_9 + tmpr);
+      i1_5 = (i2_9 + tmpi);
+      r1_21 = (r2_9 - tmpr);
+      i1_21 = (i2_9 - tmpi);
+      tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
+      tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
+      r1_7 = (r2_13 + tmpr);
+      i1_7 = (i2_13 + tmpi);
+      r1_23 = (r2_13 - tmpr);
+      i1_23 = (i2_13 - tmpi);
+      r1_9 = (r2_17 + i2_19);
+      i1_9 = (i2_17 - r2_19);
+      r1_25 = (r2_17 - i2_19);
+      i1_25 = (i2_17 + r2_19);
+      tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
+      tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
+      r1_11 = (r2_21 + tmpr);
+      i1_11 = (i2_21 - tmpi);
+      r1_27 = (r2_21 - tmpr);
+      i1_27 = (i2_21 + tmpi);
+      tmpr = (0.707106781187 * (i2_27 - r2_27));
+      tmpi = (0.707106781187 * (r2_27 + i2_27));
+      r1_13 = (r2_25 + tmpr);
+      i1_13 = (i2_25 - tmpi);
+      r1_29 = (r2_25 - tmpr);
+      i1_29 = (i2_25 + tmpi);
+      tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
+      tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
+      r1_15 = (r2_29 + tmpr);
+      i1_15 = (i2_29 - tmpi);
+      r1_31 = (r2_29 - tmpr);
+      i1_31 = (i2_29 + tmpi);
 	  }
 	  c_re(out[0]) = (r1_0 + r1_1);
 	  c_im(out[0]) = (i1_0 + i1_1);
@@ -2811,18 +3153,18 @@ void fft_base_32(COMPLEX * in, COMPLEX * out)
 	  c_im(out[15]) = (i1_30 - tmpi);
 	  c_re(out[31]) = (r1_30 - tmpr);
 	  c_im(out[31]) = (i1_30 + tmpi);
-     }
+  }
 }
 void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -2856,23 +3198,23 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 		    REAL r1_30, i1_30;
 		    REAL r1_31, i1_31;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 REAL r2_8, i2_8;
-			 REAL r2_10, i2_10;
-			 REAL r2_12, i2_12;
-			 REAL r2_14, i2_14;
-			 REAL r2_16, i2_16;
-			 REAL r2_18, i2_18;
-			 REAL r2_20, i2_20;
-			 REAL r2_22, i2_22;
-			 REAL r2_24, i2_24;
-			 REAL r2_26, i2_26;
-			 REAL r2_28, i2_28;
-			 REAL r2_30, i2_30;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          REAL r2_8, i2_8;
+          REAL r2_10, i2_10;
+          REAL r2_12, i2_12;
+          REAL r2_14, i2_14;
+          REAL r2_16, i2_16;
+          REAL r2_18, i2_18;
+          REAL r2_20, i2_20;
+          REAL r2_22, i2_22;
+          REAL r2_24, i2_24;
+          REAL r2_26, i2_26;
+          REAL r2_28, i2_28;
+          REAL r2_30, i2_30;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      REAL r3_8, i3_8;
@@ -2882,108 +3224,108 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      REAL r3_24, i3_24;
 			      REAL r3_28, i3_28;
 			      {
-				   REAL r4_0, i4_0;
-				   REAL r4_8, i4_8;
-				   REAL r4_16, i4_16;
-				   REAL r4_24, i4_24;
-				   {
-					REAL r5_0, i5_0;
-					REAL r5_16, i5_16;
-					r5_0 = c_re(jp[0 * m]);
-					i5_0 = c_im(jp[0 * m]);
-					wr = c_re(W[16 * l1]);
-					wi = c_im(W[16 * l1]);
-					tmpr = c_re(jp[16 * m]);
-					tmpi = c_im(jp[16 * m]);
-					r5_16 = ((wr * tmpr) - (wi * tmpi));
-					i5_16 = ((wi * tmpr) + (wr * tmpi));
-					r4_0 = (r5_0 + r5_16);
-					i4_0 = (i5_0 + i5_16);
-					r4_16 = (r5_0 - r5_16);
-					i4_16 = (i5_0 - i5_16);
-				   }
-				   {
-					REAL r5_8, i5_8;
-					REAL r5_24, i5_24;
-					wr = c_re(W[8 * l1]);
-					wi = c_im(W[8 * l1]);
-					tmpr = c_re(jp[8 * m]);
-					tmpi = c_im(jp[8 * m]);
-					r5_8 = ((wr * tmpr) - (wi * tmpi));
-					i5_8 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[24 * l1]);
-					wi = c_im(W[24 * l1]);
-					tmpr = c_re(jp[24 * m]);
-					tmpi = c_im(jp[24 * m]);
-					r5_24 = ((wr * tmpr) - (wi * tmpi));
-					i5_24 = ((wi * tmpr) + (wr * tmpi));
-					r4_8 = (r5_8 + r5_24);
-					i4_8 = (i5_8 + i5_24);
-					r4_24 = (r5_8 - r5_24);
-					i4_24 = (i5_8 - i5_24);
-				   }
-				   r3_0 = (r4_0 + r4_8);
-				   i3_0 = (i4_0 + i4_8);
-				   r3_16 = (r4_0 - r4_8);
-				   i3_16 = (i4_0 - i4_8);
-				   r3_8 = (r4_16 + i4_24);
-				   i3_8 = (i4_16 - r4_24);
-				   r3_24 = (r4_16 - i4_24);
-				   i3_24 = (i4_16 + r4_24);
+              REAL r4_0, i4_0;
+              REAL r4_8, i4_8;
+              REAL r4_16, i4_16;
+              REAL r4_24, i4_24;
+              {
+                REAL r5_0, i5_0;
+                REAL r5_16, i5_16;
+                r5_0 = c_re(jp[0 * m]);
+                i5_0 = c_im(jp[0 * m]);
+                wr = c_re(W[16 * l1]);
+                wi = c_im(W[16 * l1]);
+                tmpr = c_re(jp[16 * m]);
+                tmpi = c_im(jp[16 * m]);
+                r5_16 = ((wr * tmpr) - (wi * tmpi));
+                i5_16 = ((wi * tmpr) + (wr * tmpi));
+                r4_0 = (r5_0 + r5_16);
+                i4_0 = (i5_0 + i5_16);
+                r4_16 = (r5_0 - r5_16);
+                i4_16 = (i5_0 - i5_16);
+              }
+              {
+                REAL r5_8, i5_8;
+                REAL r5_24, i5_24;
+                wr = c_re(W[8 * l1]);
+                wi = c_im(W[8 * l1]);
+                tmpr = c_re(jp[8 * m]);
+                tmpi = c_im(jp[8 * m]);
+                r5_8 = ((wr * tmpr) - (wi * tmpi));
+                i5_8 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[24 * l1]);
+                wi = c_im(W[24 * l1]);
+                tmpr = c_re(jp[24 * m]);
+                tmpi = c_im(jp[24 * m]);
+                r5_24 = ((wr * tmpr) - (wi * tmpi));
+                i5_24 = ((wi * tmpr) + (wr * tmpi));
+                r4_8 = (r5_8 + r5_24);
+                i4_8 = (i5_8 + i5_24);
+                r4_24 = (r5_8 - r5_24);
+                i4_24 = (i5_8 - i5_24);
+              }
+              r3_0 = (r4_0 + r4_8);
+              i3_0 = (i4_0 + i4_8);
+              r3_16 = (r4_0 - r4_8);
+              i3_16 = (i4_0 - i4_8);
+              r3_8 = (r4_16 + i4_24);
+              i3_8 = (i4_16 - r4_24);
+              r3_24 = (r4_16 - i4_24);
+              i3_24 = (i4_16 + r4_24);
 			      }
 			      {
-				   REAL r4_4, i4_4;
-				   REAL r4_12, i4_12;
-				   REAL r4_20, i4_20;
-				   REAL r4_28, i4_28;
-				   {
-					REAL r5_4, i5_4;
-					REAL r5_20, i5_20;
-					wr = c_re(W[4 * l1]);
-					wi = c_im(W[4 * l1]);
-					tmpr = c_re(jp[4 * m]);
-					tmpi = c_im(jp[4 * m]);
-					r5_4 = ((wr * tmpr) - (wi * tmpi));
-					i5_4 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[20 * l1]);
-					wi = c_im(W[20 * l1]);
-					tmpr = c_re(jp[20 * m]);
-					tmpi = c_im(jp[20 * m]);
-					r5_20 = ((wr * tmpr) - (wi * tmpi));
-					i5_20 = ((wi * tmpr) + (wr * tmpi));
-					r4_4 = (r5_4 + r5_20);
-					i4_4 = (i5_4 + i5_20);
-					r4_20 = (r5_4 - r5_20);
-					i4_20 = (i5_4 - i5_20);
-				   }
-				   {
-					REAL r5_12, i5_12;
-					REAL r5_28, i5_28;
-					wr = c_re(W[12 * l1]);
-					wi = c_im(W[12 * l1]);
-					tmpr = c_re(jp[12 * m]);
-					tmpi = c_im(jp[12 * m]);
-					r5_12 = ((wr * tmpr) - (wi * tmpi));
-					i5_12 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[28 * l1]);
-					wi = c_im(W[28 * l1]);
-					tmpr = c_re(jp[28 * m]);
-					tmpi = c_im(jp[28 * m]);
-					r5_28 = ((wr * tmpr) - (wi * tmpi));
-					i5_28 = ((wi * tmpr) + (wr * tmpi));
-					r4_12 = (r5_12 + r5_28);
-					i4_12 = (i5_12 + i5_28);
-					r4_28 = (r5_12 - r5_28);
-					i4_28 = (i5_12 - i5_28);
-				   }
-				   r3_4 = (r4_4 + r4_12);
-				   i3_4 = (i4_4 + i4_12);
-				   r3_20 = (r4_4 - r4_12);
-				   i3_20 = (i4_4 - i4_12);
-				   r3_12 = (r4_20 + i4_28);
-				   i3_12 = (i4_20 - r4_28);
-				   r3_28 = (r4_20 - i4_28);
-				   i3_28 = (i4_20 + r4_28);
+              REAL r4_4, i4_4;
+              REAL r4_12, i4_12;
+              REAL r4_20, i4_20;
+              REAL r4_28, i4_28;
+              {
+                REAL r5_4, i5_4;
+                REAL r5_20, i5_20;
+                wr = c_re(W[4 * l1]);
+                wi = c_im(W[4 * l1]);
+                tmpr = c_re(jp[4 * m]);
+                tmpi = c_im(jp[4 * m]);
+                r5_4 = ((wr * tmpr) - (wi * tmpi));
+                i5_4 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[20 * l1]);
+                wi = c_im(W[20 * l1]);
+                tmpr = c_re(jp[20 * m]);
+                tmpi = c_im(jp[20 * m]);
+                r5_20 = ((wr * tmpr) - (wi * tmpi));
+                i5_20 = ((wi * tmpr) + (wr * tmpi));
+                r4_4 = (r5_4 + r5_20);
+                i4_4 = (i5_4 + i5_20);
+                r4_20 = (r5_4 - r5_20);
+                i4_20 = (i5_4 - i5_20);
+              }
+              {
+                REAL r5_12, i5_12;
+                REAL r5_28, i5_28;
+                wr = c_re(W[12 * l1]);
+                wi = c_im(W[12 * l1]);
+                tmpr = c_re(jp[12 * m]);
+                tmpi = c_im(jp[12 * m]);
+                r5_12 = ((wr * tmpr) - (wi * tmpi));
+                i5_12 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[28 * l1]);
+                wi = c_im(W[28 * l1]);
+                tmpr = c_re(jp[28 * m]);
+                tmpi = c_im(jp[28 * m]);
+                r5_28 = ((wr * tmpr) - (wi * tmpi));
+                i5_28 = ((wi * tmpr) + (wr * tmpi));
+                r4_12 = (r5_12 + r5_28);
+                i4_12 = (i5_12 + i5_28);
+                r4_28 = (r5_12 - r5_28);
+                i4_28 = (i5_12 - i5_28);
+              }
+              r3_4 = (r4_4 + r4_12);
+              i3_4 = (i4_4 + i4_12);
+              r3_20 = (r4_4 - r4_12);
+              i3_20 = (i4_4 - i4_12);
+              r3_12 = (r4_20 + i4_28);
+              i3_12 = (i4_20 - r4_28);
+              r3_28 = (r4_20 - i4_28);
+              i3_28 = (i4_20 + r4_28);
 			      }
 			      r2_0 = (r3_0 + r3_4);
 			      i2_0 = (i3_0 + i3_4);
@@ -3005,8 +3347,8 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_12 = (i3_24 - tmpi);
 			      r2_28 = (r3_24 - tmpr);
 			      i2_28 = (i3_24 + tmpi);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      REAL r3_10, i3_10;
@@ -3016,112 +3358,112 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      REAL r3_26, i3_26;
 			      REAL r3_30, i3_30;
 			      {
-				   REAL r4_2, i4_2;
-				   REAL r4_10, i4_10;
-				   REAL r4_18, i4_18;
-				   REAL r4_26, i4_26;
-				   {
-					REAL r5_2, i5_2;
-					REAL r5_18, i5_18;
-					wr = c_re(W[2 * l1]);
-					wi = c_im(W[2 * l1]);
-					tmpr = c_re(jp[2 * m]);
-					tmpi = c_im(jp[2 * m]);
-					r5_2 = ((wr * tmpr) - (wi * tmpi));
-					i5_2 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[18 * l1]);
-					wi = c_im(W[18 * l1]);
-					tmpr = c_re(jp[18 * m]);
-					tmpi = c_im(jp[18 * m]);
-					r5_18 = ((wr * tmpr) - (wi * tmpi));
-					i5_18 = ((wi * tmpr) + (wr * tmpi));
-					r4_2 = (r5_2 + r5_18);
-					i4_2 = (i5_2 + i5_18);
-					r4_18 = (r5_2 - r5_18);
-					i4_18 = (i5_2 - i5_18);
-				   }
-				   {
-					REAL r5_10, i5_10;
-					REAL r5_26, i5_26;
-					wr = c_re(W[10 * l1]);
-					wi = c_im(W[10 * l1]);
-					tmpr = c_re(jp[10 * m]);
-					tmpi = c_im(jp[10 * m]);
-					r5_10 = ((wr * tmpr) - (wi * tmpi));
-					i5_10 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[26 * l1]);
-					wi = c_im(W[26 * l1]);
-					tmpr = c_re(jp[26 * m]);
-					tmpi = c_im(jp[26 * m]);
-					r5_26 = ((wr * tmpr) - (wi * tmpi));
-					i5_26 = ((wi * tmpr) + (wr * tmpi));
-					r4_10 = (r5_10 + r5_26);
-					i4_10 = (i5_10 + i5_26);
-					r4_26 = (r5_10 - r5_26);
-					i4_26 = (i5_10 - i5_26);
-				   }
-				   r3_2 = (r4_2 + r4_10);
-				   i3_2 = (i4_2 + i4_10);
-				   r3_18 = (r4_2 - r4_10);
-				   i3_18 = (i4_2 - i4_10);
-				   r3_10 = (r4_18 + i4_26);
-				   i3_10 = (i4_18 - r4_26);
-				   r3_26 = (r4_18 - i4_26);
-				   i3_26 = (i4_18 + r4_26);
+              REAL r4_2, i4_2;
+              REAL r4_10, i4_10;
+              REAL r4_18, i4_18;
+              REAL r4_26, i4_26;
+              {
+                REAL r5_2, i5_2;
+                REAL r5_18, i5_18;
+                wr = c_re(W[2 * l1]);
+                wi = c_im(W[2 * l1]);
+                tmpr = c_re(jp[2 * m]);
+                tmpi = c_im(jp[2 * m]);
+                r5_2 = ((wr * tmpr) - (wi * tmpi));
+                i5_2 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[18 * l1]);
+                wi = c_im(W[18 * l1]);
+                tmpr = c_re(jp[18 * m]);
+                tmpi = c_im(jp[18 * m]);
+                r5_18 = ((wr * tmpr) - (wi * tmpi));
+                i5_18 = ((wi * tmpr) + (wr * tmpi));
+                r4_2 = (r5_2 + r5_18);
+                i4_2 = (i5_2 + i5_18);
+                r4_18 = (r5_2 - r5_18);
+                i4_18 = (i5_2 - i5_18);
+              }
+              {
+                REAL r5_10, i5_10;
+                REAL r5_26, i5_26;
+                wr = c_re(W[10 * l1]);
+                wi = c_im(W[10 * l1]);
+                tmpr = c_re(jp[10 * m]);
+                tmpi = c_im(jp[10 * m]);
+                r5_10 = ((wr * tmpr) - (wi * tmpi));
+                i5_10 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[26 * l1]);
+                wi = c_im(W[26 * l1]);
+                tmpr = c_re(jp[26 * m]);
+                tmpi = c_im(jp[26 * m]);
+                r5_26 = ((wr * tmpr) - (wi * tmpi));
+                i5_26 = ((wi * tmpr) + (wr * tmpi));
+                r4_10 = (r5_10 + r5_26);
+                i4_10 = (i5_10 + i5_26);
+                r4_26 = (r5_10 - r5_26);
+                i4_26 = (i5_10 - i5_26);
+              }
+              r3_2 = (r4_2 + r4_10);
+              i3_2 = (i4_2 + i4_10);
+              r3_18 = (r4_2 - r4_10);
+              i3_18 = (i4_2 - i4_10);
+              r3_10 = (r4_18 + i4_26);
+              i3_10 = (i4_18 - r4_26);
+              r3_26 = (r4_18 - i4_26);
+              i3_26 = (i4_18 + r4_26);
 			      }
 			      {
-				   REAL r4_6, i4_6;
-				   REAL r4_14, i4_14;
-				   REAL r4_22, i4_22;
-				   REAL r4_30, i4_30;
-				   {
-					REAL r5_6, i5_6;
-					REAL r5_22, i5_22;
-					wr = c_re(W[6 * l1]);
-					wi = c_im(W[6 * l1]);
-					tmpr = c_re(jp[6 * m]);
-					tmpi = c_im(jp[6 * m]);
-					r5_6 = ((wr * tmpr) - (wi * tmpi));
-					i5_6 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[22 * l1]);
-					wi = c_im(W[22 * l1]);
-					tmpr = c_re(jp[22 * m]);
-					tmpi = c_im(jp[22 * m]);
-					r5_22 = ((wr * tmpr) - (wi * tmpi));
-					i5_22 = ((wi * tmpr) + (wr * tmpi));
-					r4_6 = (r5_6 + r5_22);
-					i4_6 = (i5_6 + i5_22);
-					r4_22 = (r5_6 - r5_22);
-					i4_22 = (i5_6 - i5_22);
-				   }
-				   {
-					REAL r5_14, i5_14;
-					REAL r5_30, i5_30;
-					wr = c_re(W[14 * l1]);
-					wi = c_im(W[14 * l1]);
-					tmpr = c_re(jp[14 * m]);
-					tmpi = c_im(jp[14 * m]);
-					r5_14 = ((wr * tmpr) - (wi * tmpi));
-					i5_14 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[30 * l1]);
-					wi = c_im(W[30 * l1]);
-					tmpr = c_re(jp[30 * m]);
-					tmpi = c_im(jp[30 * m]);
-					r5_30 = ((wr * tmpr) - (wi * tmpi));
-					i5_30 = ((wi * tmpr) + (wr * tmpi));
-					r4_14 = (r5_14 + r5_30);
-					i4_14 = (i5_14 + i5_30);
-					r4_30 = (r5_14 - r5_30);
-					i4_30 = (i5_14 - i5_30);
-				   }
-				   r3_6 = (r4_6 + r4_14);
-				   i3_6 = (i4_6 + i4_14);
-				   r3_22 = (r4_6 - r4_14);
-				   i3_22 = (i4_6 - i4_14);
-				   r3_14 = (r4_22 + i4_30);
-				   i3_14 = (i4_22 - r4_30);
-				   r3_30 = (r4_22 - i4_30);
-				   i3_30 = (i4_22 + r4_30);
+              REAL r4_6, i4_6;
+              REAL r4_14, i4_14;
+              REAL r4_22, i4_22;
+              REAL r4_30, i4_30;
+              {
+                REAL r5_6, i5_6;
+                REAL r5_22, i5_22;
+                wr = c_re(W[6 * l1]);
+                wi = c_im(W[6 * l1]);
+                tmpr = c_re(jp[6 * m]);
+                tmpi = c_im(jp[6 * m]);
+                r5_6 = ((wr * tmpr) - (wi * tmpi));
+                i5_6 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[22 * l1]);
+                wi = c_im(W[22 * l1]);
+                tmpr = c_re(jp[22 * m]);
+                tmpi = c_im(jp[22 * m]);
+                r5_22 = ((wr * tmpr) - (wi * tmpi));
+                i5_22 = ((wi * tmpr) + (wr * tmpi));
+                r4_6 = (r5_6 + r5_22);
+                i4_6 = (i5_6 + i5_22);
+                r4_22 = (r5_6 - r5_22);
+                i4_22 = (i5_6 - i5_22);
+              }
+              {
+                REAL r5_14, i5_14;
+                REAL r5_30, i5_30;
+                wr = c_re(W[14 * l1]);
+                wi = c_im(W[14 * l1]);
+                tmpr = c_re(jp[14 * m]);
+                tmpi = c_im(jp[14 * m]);
+                r5_14 = ((wr * tmpr) - (wi * tmpi));
+                i5_14 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[30 * l1]);
+                wi = c_im(W[30 * l1]);
+                tmpr = c_re(jp[30 * m]);
+                tmpi = c_im(jp[30 * m]);
+                r5_30 = ((wr * tmpr) - (wi * tmpi));
+                i5_30 = ((wi * tmpr) + (wr * tmpi));
+                r4_14 = (r5_14 + r5_30);
+                i4_14 = (i5_14 + i5_30);
+                r4_30 = (r5_14 - r5_30);
+                i4_30 = (i5_14 - i5_30);
+              }
+              r3_6 = (r4_6 + r4_14);
+              i3_6 = (i4_6 + i4_14);
+              r3_22 = (r4_6 - r4_14);
+              i3_22 = (i4_6 - i4_14);
+              r3_14 = (r4_22 + i4_30);
+              i3_14 = (i4_22 - r4_30);
+              r3_30 = (r4_22 - i4_30);
+              i3_30 = (i4_22 + r4_30);
 			      }
 			      r2_2 = (r3_2 + r3_6);
 			      i2_2 = (i3_2 + i3_6);
@@ -3143,70 +3485,70 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_14 = (i3_26 - tmpi);
 			      r2_30 = (r3_26 - tmpr);
 			      i2_30 = (i3_26 + tmpi);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_16 = (r2_0 - r2_2);
-			 i1_16 = (i2_0 - i2_2);
-			 tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
-			 tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
-			 r1_2 = (r2_4 + tmpr);
-			 i1_2 = (i2_4 + tmpi);
-			 r1_18 = (r2_4 - tmpr);
-			 i1_18 = (i2_4 - tmpi);
-			 tmpr = (0.707106781187 * (r2_10 + i2_10));
-			 tmpi = (0.707106781187 * (i2_10 - r2_10));
-			 r1_4 = (r2_8 + tmpr);
-			 i1_4 = (i2_8 + tmpi);
-			 r1_20 = (r2_8 - tmpr);
-			 i1_20 = (i2_8 - tmpi);
-			 tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
-			 tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
-			 r1_6 = (r2_12 + tmpr);
-			 i1_6 = (i2_12 + tmpi);
-			 r1_22 = (r2_12 - tmpr);
-			 i1_22 = (i2_12 - tmpi);
-			 r1_8 = (r2_16 + i2_18);
-			 i1_8 = (i2_16 - r2_18);
-			 r1_24 = (r2_16 - i2_18);
-			 i1_24 = (i2_16 + r2_18);
-			 tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
-			 tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
-			 r1_10 = (r2_20 + tmpr);
-			 i1_10 = (i2_20 - tmpi);
-			 r1_26 = (r2_20 - tmpr);
-			 i1_26 = (i2_20 + tmpi);
-			 tmpr = (0.707106781187 * (i2_26 - r2_26));
-			 tmpi = (0.707106781187 * (r2_26 + i2_26));
-			 r1_12 = (r2_24 + tmpr);
-			 i1_12 = (i2_24 - tmpi);
-			 r1_28 = (r2_24 - tmpr);
-			 i1_28 = (i2_24 + tmpi);
-			 tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
-			 tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
-			 r1_14 = (r2_28 + tmpr);
-			 i1_14 = (i2_28 - tmpi);
-			 r1_30 = (r2_28 - tmpr);
-			 i1_30 = (i2_28 + tmpi);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_16 = (r2_0 - r2_2);
+          i1_16 = (i2_0 - i2_2);
+          tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
+          tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
+          r1_2 = (r2_4 + tmpr);
+          i1_2 = (i2_4 + tmpi);
+          r1_18 = (r2_4 - tmpr);
+          i1_18 = (i2_4 - tmpi);
+          tmpr = (0.707106781187 * (r2_10 + i2_10));
+          tmpi = (0.707106781187 * (i2_10 - r2_10));
+          r1_4 = (r2_8 + tmpr);
+          i1_4 = (i2_8 + tmpi);
+          r1_20 = (r2_8 - tmpr);
+          i1_20 = (i2_8 - tmpi);
+          tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
+          tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
+          r1_6 = (r2_12 + tmpr);
+          i1_6 = (i2_12 + tmpi);
+          r1_22 = (r2_12 - tmpr);
+          i1_22 = (i2_12 - tmpi);
+          r1_8 = (r2_16 + i2_18);
+          i1_8 = (i2_16 - r2_18);
+          r1_24 = (r2_16 - i2_18);
+          i1_24 = (i2_16 + r2_18);
+          tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
+          tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
+          r1_10 = (r2_20 + tmpr);
+          i1_10 = (i2_20 - tmpi);
+          r1_26 = (r2_20 - tmpr);
+          i1_26 = (i2_20 + tmpi);
+          tmpr = (0.707106781187 * (i2_26 - r2_26));
+          tmpi = (0.707106781187 * (r2_26 + i2_26));
+          r1_12 = (r2_24 + tmpr);
+          i1_12 = (i2_24 - tmpi);
+          r1_28 = (r2_24 - tmpr);
+          i1_28 = (i2_24 + tmpi);
+          tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
+          tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
+          r1_14 = (r2_28 + tmpr);
+          i1_14 = (i2_28 - tmpi);
+          r1_30 = (r2_28 - tmpr);
+          i1_30 = (i2_28 + tmpi);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 REAL r2_9, i2_9;
-			 REAL r2_11, i2_11;
-			 REAL r2_13, i2_13;
-			 REAL r2_15, i2_15;
-			 REAL r2_17, i2_17;
-			 REAL r2_19, i2_19;
-			 REAL r2_21, i2_21;
-			 REAL r2_23, i2_23;
-			 REAL r2_25, i2_25;
-			 REAL r2_27, i2_27;
-			 REAL r2_29, i2_29;
-			 REAL r2_31, i2_31;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          REAL r2_9, i2_9;
+          REAL r2_11, i2_11;
+          REAL r2_13, i2_13;
+          REAL r2_15, i2_15;
+          REAL r2_17, i2_17;
+          REAL r2_19, i2_19;
+          REAL r2_21, i2_21;
+          REAL r2_23, i2_23;
+          REAL r2_25, i2_25;
+          REAL r2_27, i2_27;
+          REAL r2_29, i2_29;
+          REAL r2_31, i2_31;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      REAL r3_9, i3_9;
@@ -3216,112 +3558,112 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      REAL r3_25, i3_25;
 			      REAL r3_29, i3_29;
 			      {
-				   REAL r4_1, i4_1;
-				   REAL r4_9, i4_9;
-				   REAL r4_17, i4_17;
-				   REAL r4_25, i4_25;
-				   {
-					REAL r5_1, i5_1;
-					REAL r5_17, i5_17;
-					wr = c_re(W[1 * l1]);
-					wi = c_im(W[1 * l1]);
-					tmpr = c_re(jp[1 * m]);
-					tmpi = c_im(jp[1 * m]);
-					r5_1 = ((wr * tmpr) - (wi * tmpi));
-					i5_1 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[17 * l1]);
-					wi = c_im(W[17 * l1]);
-					tmpr = c_re(jp[17 * m]);
-					tmpi = c_im(jp[17 * m]);
-					r5_17 = ((wr * tmpr) - (wi * tmpi));
-					i5_17 = ((wi * tmpr) + (wr * tmpi));
-					r4_1 = (r5_1 + r5_17);
-					i4_1 = (i5_1 + i5_17);
-					r4_17 = (r5_1 - r5_17);
-					i4_17 = (i5_1 - i5_17);
-				   }
-				   {
-					REAL r5_9, i5_9;
-					REAL r5_25, i5_25;
-					wr = c_re(W[9 * l1]);
-					wi = c_im(W[9 * l1]);
-					tmpr = c_re(jp[9 * m]);
-					tmpi = c_im(jp[9 * m]);
-					r5_9 = ((wr * tmpr) - (wi * tmpi));
-					i5_9 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[25 * l1]);
-					wi = c_im(W[25 * l1]);
-					tmpr = c_re(jp[25 * m]);
-					tmpi = c_im(jp[25 * m]);
-					r5_25 = ((wr * tmpr) - (wi * tmpi));
-					i5_25 = ((wi * tmpr) + (wr * tmpi));
-					r4_9 = (r5_9 + r5_25);
-					i4_9 = (i5_9 + i5_25);
-					r4_25 = (r5_9 - r5_25);
-					i4_25 = (i5_9 - i5_25);
-				   }
-				   r3_1 = (r4_1 + r4_9);
-				   i3_1 = (i4_1 + i4_9);
-				   r3_17 = (r4_1 - r4_9);
-				   i3_17 = (i4_1 - i4_9);
-				   r3_9 = (r4_17 + i4_25);
-				   i3_9 = (i4_17 - r4_25);
-				   r3_25 = (r4_17 - i4_25);
-				   i3_25 = (i4_17 + r4_25);
+              REAL r4_1, i4_1;
+              REAL r4_9, i4_9;
+              REAL r4_17, i4_17;
+              REAL r4_25, i4_25;
+              {
+                REAL r5_1, i5_1;
+                REAL r5_17, i5_17;
+                wr = c_re(W[1 * l1]);
+                wi = c_im(W[1 * l1]);
+                tmpr = c_re(jp[1 * m]);
+                tmpi = c_im(jp[1 * m]);
+                r5_1 = ((wr * tmpr) - (wi * tmpi));
+                i5_1 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[17 * l1]);
+                wi = c_im(W[17 * l1]);
+                tmpr = c_re(jp[17 * m]);
+                tmpi = c_im(jp[17 * m]);
+                r5_17 = ((wr * tmpr) - (wi * tmpi));
+                i5_17 = ((wi * tmpr) + (wr * tmpi));
+                r4_1 = (r5_1 + r5_17);
+                i4_1 = (i5_1 + i5_17);
+                r4_17 = (r5_1 - r5_17);
+                i4_17 = (i5_1 - i5_17);
+              }
+              {
+                REAL r5_9, i5_9;
+                REAL r5_25, i5_25;
+                wr = c_re(W[9 * l1]);
+                wi = c_im(W[9 * l1]);
+                tmpr = c_re(jp[9 * m]);
+                tmpi = c_im(jp[9 * m]);
+                r5_9 = ((wr * tmpr) - (wi * tmpi));
+                i5_9 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[25 * l1]);
+                wi = c_im(W[25 * l1]);
+                tmpr = c_re(jp[25 * m]);
+                tmpi = c_im(jp[25 * m]);
+                r5_25 = ((wr * tmpr) - (wi * tmpi));
+                i5_25 = ((wi * tmpr) + (wr * tmpi));
+                r4_9 = (r5_9 + r5_25);
+                i4_9 = (i5_9 + i5_25);
+                r4_25 = (r5_9 - r5_25);
+                i4_25 = (i5_9 - i5_25);
+              }
+              r3_1 = (r4_1 + r4_9);
+              i3_1 = (i4_1 + i4_9);
+              r3_17 = (r4_1 - r4_9);
+              i3_17 = (i4_1 - i4_9);
+              r3_9 = (r4_17 + i4_25);
+              i3_9 = (i4_17 - r4_25);
+              r3_25 = (r4_17 - i4_25);
+              i3_25 = (i4_17 + r4_25);
 			      }
 			      {
-				   REAL r4_5, i4_5;
-				   REAL r4_13, i4_13;
-				   REAL r4_21, i4_21;
-				   REAL r4_29, i4_29;
-				   {
-					REAL r5_5, i5_5;
-					REAL r5_21, i5_21;
-					wr = c_re(W[5 * l1]);
-					wi = c_im(W[5 * l1]);
-					tmpr = c_re(jp[5 * m]);
-					tmpi = c_im(jp[5 * m]);
-					r5_5 = ((wr * tmpr) - (wi * tmpi));
-					i5_5 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[21 * l1]);
-					wi = c_im(W[21 * l1]);
-					tmpr = c_re(jp[21 * m]);
-					tmpi = c_im(jp[21 * m]);
-					r5_21 = ((wr * tmpr) - (wi * tmpi));
-					i5_21 = ((wi * tmpr) + (wr * tmpi));
-					r4_5 = (r5_5 + r5_21);
-					i4_5 = (i5_5 + i5_21);
-					r4_21 = (r5_5 - r5_21);
-					i4_21 = (i5_5 - i5_21);
-				   }
-				   {
-					REAL r5_13, i5_13;
-					REAL r5_29, i5_29;
-					wr = c_re(W[13 * l1]);
-					wi = c_im(W[13 * l1]);
-					tmpr = c_re(jp[13 * m]);
-					tmpi = c_im(jp[13 * m]);
-					r5_13 = ((wr * tmpr) - (wi * tmpi));
-					i5_13 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[29 * l1]);
-					wi = c_im(W[29 * l1]);
-					tmpr = c_re(jp[29 * m]);
-					tmpi = c_im(jp[29 * m]);
-					r5_29 = ((wr * tmpr) - (wi * tmpi));
-					i5_29 = ((wi * tmpr) + (wr * tmpi));
-					r4_13 = (r5_13 + r5_29);
-					i4_13 = (i5_13 + i5_29);
-					r4_29 = (r5_13 - r5_29);
-					i4_29 = (i5_13 - i5_29);
-				   }
-				   r3_5 = (r4_5 + r4_13);
-				   i3_5 = (i4_5 + i4_13);
-				   r3_21 = (r4_5 - r4_13);
-				   i3_21 = (i4_5 - i4_13);
-				   r3_13 = (r4_21 + i4_29);
-				   i3_13 = (i4_21 - r4_29);
-				   r3_29 = (r4_21 - i4_29);
-				   i3_29 = (i4_21 + r4_29);
+              REAL r4_5, i4_5;
+              REAL r4_13, i4_13;
+              REAL r4_21, i4_21;
+              REAL r4_29, i4_29;
+              {
+                REAL r5_5, i5_5;
+                REAL r5_21, i5_21;
+                wr = c_re(W[5 * l1]);
+                wi = c_im(W[5 * l1]);
+                tmpr = c_re(jp[5 * m]);
+                tmpi = c_im(jp[5 * m]);
+                r5_5 = ((wr * tmpr) - (wi * tmpi));
+                i5_5 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[21 * l1]);
+                wi = c_im(W[21 * l1]);
+                tmpr = c_re(jp[21 * m]);
+                tmpi = c_im(jp[21 * m]);
+                r5_21 = ((wr * tmpr) - (wi * tmpi));
+                i5_21 = ((wi * tmpr) + (wr * tmpi));
+                r4_5 = (r5_5 + r5_21);
+                i4_5 = (i5_5 + i5_21);
+                r4_21 = (r5_5 - r5_21);
+                i4_21 = (i5_5 - i5_21);
+              }
+              {
+                REAL r5_13, i5_13;
+                REAL r5_29, i5_29;
+                wr = c_re(W[13 * l1]);
+                wi = c_im(W[13 * l1]);
+                tmpr = c_re(jp[13 * m]);
+                tmpi = c_im(jp[13 * m]);
+                r5_13 = ((wr * tmpr) - (wi * tmpi));
+                i5_13 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[29 * l1]);
+                wi = c_im(W[29 * l1]);
+                tmpr = c_re(jp[29 * m]);
+                tmpi = c_im(jp[29 * m]);
+                r5_29 = ((wr * tmpr) - (wi * tmpi));
+                i5_29 = ((wi * tmpr) + (wr * tmpi));
+                r4_13 = (r5_13 + r5_29);
+                i4_13 = (i5_13 + i5_29);
+                r4_29 = (r5_13 - r5_29);
+                i4_29 = (i5_13 - i5_29);
+              }
+              r3_5 = (r4_5 + r4_13);
+              i3_5 = (i4_5 + i4_13);
+              r3_21 = (r4_5 - r4_13);
+              i3_21 = (i4_5 - i4_13);
+              r3_13 = (r4_21 + i4_29);
+              i3_13 = (i4_21 - r4_29);
+              r3_29 = (r4_21 - i4_29);
+              i3_29 = (i4_21 + r4_29);
 			      }
 			      r2_1 = (r3_1 + r3_5);
 			      i2_1 = (i3_1 + i3_5);
@@ -3343,8 +3685,8 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_13 = (i3_25 - tmpi);
 			      r2_29 = (r3_25 - tmpr);
 			      i2_29 = (i3_25 + tmpi);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      REAL r3_11, i3_11;
@@ -3354,112 +3696,112 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      REAL r3_27, i3_27;
 			      REAL r3_31, i3_31;
 			      {
-				   REAL r4_3, i4_3;
-				   REAL r4_11, i4_11;
-				   REAL r4_19, i4_19;
-				   REAL r4_27, i4_27;
-				   {
-					REAL r5_3, i5_3;
-					REAL r5_19, i5_19;
-					wr = c_re(W[3 * l1]);
-					wi = c_im(W[3 * l1]);
-					tmpr = c_re(jp[3 * m]);
-					tmpi = c_im(jp[3 * m]);
-					r5_3 = ((wr * tmpr) - (wi * tmpi));
-					i5_3 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[19 * l1]);
-					wi = c_im(W[19 * l1]);
-					tmpr = c_re(jp[19 * m]);
-					tmpi = c_im(jp[19 * m]);
-					r5_19 = ((wr * tmpr) - (wi * tmpi));
-					i5_19 = ((wi * tmpr) + (wr * tmpi));
-					r4_3 = (r5_3 + r5_19);
-					i4_3 = (i5_3 + i5_19);
-					r4_19 = (r5_3 - r5_19);
-					i4_19 = (i5_3 - i5_19);
-				   }
-				   {
-					REAL r5_11, i5_11;
-					REAL r5_27, i5_27;
-					wr = c_re(W[11 * l1]);
-					wi = c_im(W[11 * l1]);
-					tmpr = c_re(jp[11 * m]);
-					tmpi = c_im(jp[11 * m]);
-					r5_11 = ((wr * tmpr) - (wi * tmpi));
-					i5_11 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[27 * l1]);
-					wi = c_im(W[27 * l1]);
-					tmpr = c_re(jp[27 * m]);
-					tmpi = c_im(jp[27 * m]);
-					r5_27 = ((wr * tmpr) - (wi * tmpi));
-					i5_27 = ((wi * tmpr) + (wr * tmpi));
-					r4_11 = (r5_11 + r5_27);
-					i4_11 = (i5_11 + i5_27);
-					r4_27 = (r5_11 - r5_27);
-					i4_27 = (i5_11 - i5_27);
-				   }
-				   r3_3 = (r4_3 + r4_11);
-				   i3_3 = (i4_3 + i4_11);
-				   r3_19 = (r4_3 - r4_11);
-				   i3_19 = (i4_3 - i4_11);
-				   r3_11 = (r4_19 + i4_27);
-				   i3_11 = (i4_19 - r4_27);
-				   r3_27 = (r4_19 - i4_27);
-				   i3_27 = (i4_19 + r4_27);
+              REAL r4_3, i4_3;
+              REAL r4_11, i4_11;
+              REAL r4_19, i4_19;
+              REAL r4_27, i4_27;
+              {
+                REAL r5_3, i5_3;
+                REAL r5_19, i5_19;
+                wr = c_re(W[3 * l1]);
+                wi = c_im(W[3 * l1]);
+                tmpr = c_re(jp[3 * m]);
+                tmpi = c_im(jp[3 * m]);
+                r5_3 = ((wr * tmpr) - (wi * tmpi));
+                i5_3 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[19 * l1]);
+                wi = c_im(W[19 * l1]);
+                tmpr = c_re(jp[19 * m]);
+                tmpi = c_im(jp[19 * m]);
+                r5_19 = ((wr * tmpr) - (wi * tmpi));
+                i5_19 = ((wi * tmpr) + (wr * tmpi));
+                r4_3 = (r5_3 + r5_19);
+                i4_3 = (i5_3 + i5_19);
+                r4_19 = (r5_3 - r5_19);
+                i4_19 = (i5_3 - i5_19);
+              }
+              {
+                REAL r5_11, i5_11;
+                REAL r5_27, i5_27;
+                wr = c_re(W[11 * l1]);
+                wi = c_im(W[11 * l1]);
+                tmpr = c_re(jp[11 * m]);
+                tmpi = c_im(jp[11 * m]);
+                r5_11 = ((wr * tmpr) - (wi * tmpi));
+                i5_11 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[27 * l1]);
+                wi = c_im(W[27 * l1]);
+                tmpr = c_re(jp[27 * m]);
+                tmpi = c_im(jp[27 * m]);
+                r5_27 = ((wr * tmpr) - (wi * tmpi));
+                i5_27 = ((wi * tmpr) + (wr * tmpi));
+                r4_11 = (r5_11 + r5_27);
+                i4_11 = (i5_11 + i5_27);
+                r4_27 = (r5_11 - r5_27);
+                i4_27 = (i5_11 - i5_27);
+              }
+              r3_3 = (r4_3 + r4_11);
+              i3_3 = (i4_3 + i4_11);
+              r3_19 = (r4_3 - r4_11);
+              i3_19 = (i4_3 - i4_11);
+              r3_11 = (r4_19 + i4_27);
+              i3_11 = (i4_19 - r4_27);
+              r3_27 = (r4_19 - i4_27);
+              i3_27 = (i4_19 + r4_27);
 			      }
 			      {
-				   REAL r4_7, i4_7;
-				   REAL r4_15, i4_15;
-				   REAL r4_23, i4_23;
-				   REAL r4_31, i4_31;
-				   {
-					REAL r5_7, i5_7;
-					REAL r5_23, i5_23;
-					wr = c_re(W[7 * l1]);
-					wi = c_im(W[7 * l1]);
-					tmpr = c_re(jp[7 * m]);
-					tmpi = c_im(jp[7 * m]);
-					r5_7 = ((wr * tmpr) - (wi * tmpi));
-					i5_7 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[23 * l1]);
-					wi = c_im(W[23 * l1]);
-					tmpr = c_re(jp[23 * m]);
-					tmpi = c_im(jp[23 * m]);
-					r5_23 = ((wr * tmpr) - (wi * tmpi));
-					i5_23 = ((wi * tmpr) + (wr * tmpi));
-					r4_7 = (r5_7 + r5_23);
-					i4_7 = (i5_7 + i5_23);
-					r4_23 = (r5_7 - r5_23);
-					i4_23 = (i5_7 - i5_23);
-				   }
-				   {
-					REAL r5_15, i5_15;
-					REAL r5_31, i5_31;
-					wr = c_re(W[15 * l1]);
-					wi = c_im(W[15 * l1]);
-					tmpr = c_re(jp[15 * m]);
-					tmpi = c_im(jp[15 * m]);
-					r5_15 = ((wr * tmpr) - (wi * tmpi));
-					i5_15 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[31 * l1]);
-					wi = c_im(W[31 * l1]);
-					tmpr = c_re(jp[31 * m]);
-					tmpi = c_im(jp[31 * m]);
-					r5_31 = ((wr * tmpr) - (wi * tmpi));
-					i5_31 = ((wi * tmpr) + (wr * tmpi));
-					r4_15 = (r5_15 + r5_31);
-					i4_15 = (i5_15 + i5_31);
-					r4_31 = (r5_15 - r5_31);
-					i4_31 = (i5_15 - i5_31);
-				   }
-				   r3_7 = (r4_7 + r4_15);
-				   i3_7 = (i4_7 + i4_15);
-				   r3_23 = (r4_7 - r4_15);
-				   i3_23 = (i4_7 - i4_15);
-				   r3_15 = (r4_23 + i4_31);
-				   i3_15 = (i4_23 - r4_31);
-				   r3_31 = (r4_23 - i4_31);
-				   i3_31 = (i4_23 + r4_31);
+              REAL r4_7, i4_7;
+              REAL r4_15, i4_15;
+              REAL r4_23, i4_23;
+              REAL r4_31, i4_31;
+              {
+                REAL r5_7, i5_7;
+                REAL r5_23, i5_23;
+                wr = c_re(W[7 * l1]);
+                wi = c_im(W[7 * l1]);
+                tmpr = c_re(jp[7 * m]);
+                tmpi = c_im(jp[7 * m]);
+                r5_7 = ((wr * tmpr) - (wi * tmpi));
+                i5_7 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[23 * l1]);
+                wi = c_im(W[23 * l1]);
+                tmpr = c_re(jp[23 * m]);
+                tmpi = c_im(jp[23 * m]);
+                r5_23 = ((wr * tmpr) - (wi * tmpi));
+                i5_23 = ((wi * tmpr) + (wr * tmpi));
+                r4_7 = (r5_7 + r5_23);
+                i4_7 = (i5_7 + i5_23);
+                r4_23 = (r5_7 - r5_23);
+                i4_23 = (i5_7 - i5_23);
+              }
+              {
+                REAL r5_15, i5_15;
+                REAL r5_31, i5_31;
+                wr = c_re(W[15 * l1]);
+                wi = c_im(W[15 * l1]);
+                tmpr = c_re(jp[15 * m]);
+                tmpi = c_im(jp[15 * m]);
+                r5_15 = ((wr * tmpr) - (wi * tmpi));
+                i5_15 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[31 * l1]);
+                wi = c_im(W[31 * l1]);
+                tmpr = c_re(jp[31 * m]);
+                tmpi = c_im(jp[31 * m]);
+                r5_31 = ((wr * tmpr) - (wi * tmpi));
+                i5_31 = ((wi * tmpr) + (wr * tmpi));
+                r4_15 = (r5_15 + r5_31);
+                i4_15 = (i5_15 + i5_31);
+                r4_31 = (r5_15 - r5_31);
+                i4_31 = (i5_15 - i5_31);
+              }
+              r3_7 = (r4_7 + r4_15);
+              i3_7 = (i4_7 + i4_15);
+              r3_23 = (r4_7 - r4_15);
+              i3_23 = (i4_7 - i4_15);
+              r3_15 = (r4_23 + i4_31);
+              i3_15 = (i4_23 - r4_31);
+              r3_31 = (r4_23 - i4_31);
+              i3_31 = (i4_23 + r4_31);
 			      }
 			      r2_3 = (r3_3 + r3_7);
 			      i2_3 = (i3_3 + i3_7);
@@ -3481,51 +3823,51 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 			      i2_15 = (i3_27 - tmpi);
 			      r2_31 = (r3_27 - tmpr);
 			      i2_31 = (i3_27 + tmpi);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_17 = (r2_1 - r2_3);
-			 i1_17 = (i2_1 - i2_3);
-			 tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
-			 tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
-			 r1_3 = (r2_5 + tmpr);
-			 i1_3 = (i2_5 + tmpi);
-			 r1_19 = (r2_5 - tmpr);
-			 i1_19 = (i2_5 - tmpi);
-			 tmpr = (0.707106781187 * (r2_11 + i2_11));
-			 tmpi = (0.707106781187 * (i2_11 - r2_11));
-			 r1_5 = (r2_9 + tmpr);
-			 i1_5 = (i2_9 + tmpi);
-			 r1_21 = (r2_9 - tmpr);
-			 i1_21 = (i2_9 - tmpi);
-			 tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
-			 tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
-			 r1_7 = (r2_13 + tmpr);
-			 i1_7 = (i2_13 + tmpi);
-			 r1_23 = (r2_13 - tmpr);
-			 i1_23 = (i2_13 - tmpi);
-			 r1_9 = (r2_17 + i2_19);
-			 i1_9 = (i2_17 - r2_19);
-			 r1_25 = (r2_17 - i2_19);
-			 i1_25 = (i2_17 + r2_19);
-			 tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
-			 tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
-			 r1_11 = (r2_21 + tmpr);
-			 i1_11 = (i2_21 - tmpi);
-			 r1_27 = (r2_21 - tmpr);
-			 i1_27 = (i2_21 + tmpi);
-			 tmpr = (0.707106781187 * (i2_27 - r2_27));
-			 tmpi = (0.707106781187 * (r2_27 + i2_27));
-			 r1_13 = (r2_25 + tmpr);
-			 i1_13 = (i2_25 - tmpi);
-			 r1_29 = (r2_25 - tmpr);
-			 i1_29 = (i2_25 + tmpi);
-			 tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
-			 tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
-			 r1_15 = (r2_29 + tmpr);
-			 i1_15 = (i2_29 - tmpi);
-			 r1_31 = (r2_29 - tmpr);
-			 i1_31 = (i2_29 + tmpi);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_17 = (r2_1 - r2_3);
+          i1_17 = (i2_1 - i2_3);
+          tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
+          tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
+          r1_3 = (r2_5 + tmpr);
+          i1_3 = (i2_5 + tmpi);
+          r1_19 = (r2_5 - tmpr);
+          i1_19 = (i2_5 - tmpi);
+          tmpr = (0.707106781187 * (r2_11 + i2_11));
+          tmpi = (0.707106781187 * (i2_11 - r2_11));
+          r1_5 = (r2_9 + tmpr);
+          i1_5 = (i2_9 + tmpi);
+          r1_21 = (r2_9 - tmpr);
+          i1_21 = (i2_9 - tmpi);
+          tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
+          tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
+          r1_7 = (r2_13 + tmpr);
+          i1_7 = (i2_13 + tmpi);
+          r1_23 = (r2_13 - tmpr);
+          i1_23 = (i2_13 - tmpi);
+          r1_9 = (r2_17 + i2_19);
+          i1_9 = (i2_17 - r2_19);
+          r1_25 = (r2_17 - i2_19);
+          i1_25 = (i2_17 + r2_19);
+          tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
+          tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
+          r1_11 = (r2_21 + tmpr);
+          i1_11 = (i2_21 - tmpi);
+          r1_27 = (r2_21 - tmpr);
+          i1_27 = (i2_21 + tmpi);
+          tmpr = (0.707106781187 * (i2_27 - r2_27));
+          tmpi = (0.707106781187 * (r2_27 + i2_27));
+          r1_13 = (r2_25 + tmpr);
+          i1_13 = (i2_25 - tmpi);
+          r1_29 = (r2_25 - tmpr);
+          i1_29 = (i2_25 + tmpi);
+          tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
+          tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
+          r1_15 = (r2_29 + tmpr);
+          i1_15 = (i2_29 - tmpi);
+          r1_31 = (r2_29 - tmpr);
+          i1_31 = (i2_29 + tmpi);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -3619,27 +3961,60 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 		    c_im(kp[15 * m]) = (i1_30 - tmpi);
 		    c_re(kp[31 * m]) = (r1_30 - tmpr);
 		    c_im(kp[31 * m]) = (i1_30 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_32,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_32(a, ab, in, out, W, nW, nWdn, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 8, fft_twiddle_32,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nWdn,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_twiddle_32(ab, b, in, out, W, nW, nWdn, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int m)
 {
-     int l1, i;
-     COMPLEX *jp, *kp;
-     REAL tmpr, tmpi, wr, wi;
-     if ((b - a) < 128) {
+  int l1, i;
+  COMPLEX *jp, *kp;
+  REAL tmpr, tmpi, wr, wi;
+  if ((b - a) < 128) {
 	  for (i = a, l1 = nWdn * i, kp = out + i; i < b;
 	       i++, l1 += nWdn, kp++) {
-	       jp = in + i;
-	       {
+      jp = in + i;
+      {
 		    REAL r1_0, i1_0;
 		    REAL r1_1, i1_1;
 		    REAL r1_2, i1_2;
@@ -3673,23 +4048,23 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 		    REAL r1_30, i1_30;
 		    REAL r1_31, i1_31;
 		    {
-			 REAL r2_0, i2_0;
-			 REAL r2_2, i2_2;
-			 REAL r2_4, i2_4;
-			 REAL r2_6, i2_6;
-			 REAL r2_8, i2_8;
-			 REAL r2_10, i2_10;
-			 REAL r2_12, i2_12;
-			 REAL r2_14, i2_14;
-			 REAL r2_16, i2_16;
-			 REAL r2_18, i2_18;
-			 REAL r2_20, i2_20;
-			 REAL r2_22, i2_22;
-			 REAL r2_24, i2_24;
-			 REAL r2_26, i2_26;
-			 REAL r2_28, i2_28;
-			 REAL r2_30, i2_30;
-			 {
+          REAL r2_0, i2_0;
+          REAL r2_2, i2_2;
+          REAL r2_4, i2_4;
+          REAL r2_6, i2_6;
+          REAL r2_8, i2_8;
+          REAL r2_10, i2_10;
+          REAL r2_12, i2_12;
+          REAL r2_14, i2_14;
+          REAL r2_16, i2_16;
+          REAL r2_18, i2_18;
+          REAL r2_20, i2_20;
+          REAL r2_22, i2_22;
+          REAL r2_24, i2_24;
+          REAL r2_26, i2_26;
+          REAL r2_28, i2_28;
+          REAL r2_30, i2_30;
+          {
 			      REAL r3_0, i3_0;
 			      REAL r3_4, i3_4;
 			      REAL r3_8, i3_8;
@@ -3699,108 +4074,108 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      REAL r3_24, i3_24;
 			      REAL r3_28, i3_28;
 			      {
-				   REAL r4_0, i4_0;
-				   REAL r4_8, i4_8;
-				   REAL r4_16, i4_16;
-				   REAL r4_24, i4_24;
-				   {
-					REAL r5_0, i5_0;
-					REAL r5_16, i5_16;
-					r5_0 = c_re(jp[0 * m]);
-					i5_0 = c_im(jp[0 * m]);
-					wr = c_re(W[16 * l1]);
-					wi = c_im(W[16 * l1]);
-					tmpr = c_re(jp[16 * m]);
-					tmpi = c_im(jp[16 * m]);
-					r5_16 = ((wr * tmpr) - (wi * tmpi));
-					i5_16 = ((wi * tmpr) + (wr * tmpi));
-					r4_0 = (r5_0 + r5_16);
-					i4_0 = (i5_0 + i5_16);
-					r4_16 = (r5_0 - r5_16);
-					i4_16 = (i5_0 - i5_16);
-				   }
-				   {
-					REAL r5_8, i5_8;
-					REAL r5_24, i5_24;
-					wr = c_re(W[8 * l1]);
-					wi = c_im(W[8 * l1]);
-					tmpr = c_re(jp[8 * m]);
-					tmpi = c_im(jp[8 * m]);
-					r5_8 = ((wr * tmpr) - (wi * tmpi));
-					i5_8 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[24 * l1]);
-					wi = c_im(W[24 * l1]);
-					tmpr = c_re(jp[24 * m]);
-					tmpi = c_im(jp[24 * m]);
-					r5_24 = ((wr * tmpr) - (wi * tmpi));
-					i5_24 = ((wi * tmpr) + (wr * tmpi));
-					r4_8 = (r5_8 + r5_24);
-					i4_8 = (i5_8 + i5_24);
-					r4_24 = (r5_8 - r5_24);
-					i4_24 = (i5_8 - i5_24);
-				   }
-				   r3_0 = (r4_0 + r4_8);
-				   i3_0 = (i4_0 + i4_8);
-				   r3_16 = (r4_0 - r4_8);
-				   i3_16 = (i4_0 - i4_8);
-				   r3_8 = (r4_16 + i4_24);
-				   i3_8 = (i4_16 - r4_24);
-				   r3_24 = (r4_16 - i4_24);
-				   i3_24 = (i4_16 + r4_24);
+              REAL r4_0, i4_0;
+              REAL r4_8, i4_8;
+              REAL r4_16, i4_16;
+              REAL r4_24, i4_24;
+              {
+                REAL r5_0, i5_0;
+                REAL r5_16, i5_16;
+                r5_0 = c_re(jp[0 * m]);
+                i5_0 = c_im(jp[0 * m]);
+                wr = c_re(W[16 * l1]);
+                wi = c_im(W[16 * l1]);
+                tmpr = c_re(jp[16 * m]);
+                tmpi = c_im(jp[16 * m]);
+                r5_16 = ((wr * tmpr) - (wi * tmpi));
+                i5_16 = ((wi * tmpr) + (wr * tmpi));
+                r4_0 = (r5_0 + r5_16);
+                i4_0 = (i5_0 + i5_16);
+                r4_16 = (r5_0 - r5_16);
+                i4_16 = (i5_0 - i5_16);
+              }
+              {
+                REAL r5_8, i5_8;
+                REAL r5_24, i5_24;
+                wr = c_re(W[8 * l1]);
+                wi = c_im(W[8 * l1]);
+                tmpr = c_re(jp[8 * m]);
+                tmpi = c_im(jp[8 * m]);
+                r5_8 = ((wr * tmpr) - (wi * tmpi));
+                i5_8 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[24 * l1]);
+                wi = c_im(W[24 * l1]);
+                tmpr = c_re(jp[24 * m]);
+                tmpi = c_im(jp[24 * m]);
+                r5_24 = ((wr * tmpr) - (wi * tmpi));
+                i5_24 = ((wi * tmpr) + (wr * tmpi));
+                r4_8 = (r5_8 + r5_24);
+                i4_8 = (i5_8 + i5_24);
+                r4_24 = (r5_8 - r5_24);
+                i4_24 = (i5_8 - i5_24);
+              }
+              r3_0 = (r4_0 + r4_8);
+              i3_0 = (i4_0 + i4_8);
+              r3_16 = (r4_0 - r4_8);
+              i3_16 = (i4_0 - i4_8);
+              r3_8 = (r4_16 + i4_24);
+              i3_8 = (i4_16 - r4_24);
+              r3_24 = (r4_16 - i4_24);
+              i3_24 = (i4_16 + r4_24);
 			      }
 			      {
-				   REAL r4_4, i4_4;
-				   REAL r4_12, i4_12;
-				   REAL r4_20, i4_20;
-				   REAL r4_28, i4_28;
-				   {
-					REAL r5_4, i5_4;
-					REAL r5_20, i5_20;
-					wr = c_re(W[4 * l1]);
-					wi = c_im(W[4 * l1]);
-					tmpr = c_re(jp[4 * m]);
-					tmpi = c_im(jp[4 * m]);
-					r5_4 = ((wr * tmpr) - (wi * tmpi));
-					i5_4 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[20 * l1]);
-					wi = c_im(W[20 * l1]);
-					tmpr = c_re(jp[20 * m]);
-					tmpi = c_im(jp[20 * m]);
-					r5_20 = ((wr * tmpr) - (wi * tmpi));
-					i5_20 = ((wi * tmpr) + (wr * tmpi));
-					r4_4 = (r5_4 + r5_20);
-					i4_4 = (i5_4 + i5_20);
-					r4_20 = (r5_4 - r5_20);
-					i4_20 = (i5_4 - i5_20);
-				   }
-				   {
-					REAL r5_12, i5_12;
-					REAL r5_28, i5_28;
-					wr = c_re(W[12 * l1]);
-					wi = c_im(W[12 * l1]);
-					tmpr = c_re(jp[12 * m]);
-					tmpi = c_im(jp[12 * m]);
-					r5_12 = ((wr * tmpr) - (wi * tmpi));
-					i5_12 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[28 * l1]);
-					wi = c_im(W[28 * l1]);
-					tmpr = c_re(jp[28 * m]);
-					tmpi = c_im(jp[28 * m]);
-					r5_28 = ((wr * tmpr) - (wi * tmpi));
-					i5_28 = ((wi * tmpr) + (wr * tmpi));
-					r4_12 = (r5_12 + r5_28);
-					i4_12 = (i5_12 + i5_28);
-					r4_28 = (r5_12 - r5_28);
-					i4_28 = (i5_12 - i5_28);
-				   }
-				   r3_4 = (r4_4 + r4_12);
-				   i3_4 = (i4_4 + i4_12);
-				   r3_20 = (r4_4 - r4_12);
-				   i3_20 = (i4_4 - i4_12);
-				   r3_12 = (r4_20 + i4_28);
-				   i3_12 = (i4_20 - r4_28);
-				   r3_28 = (r4_20 - i4_28);
-				   i3_28 = (i4_20 + r4_28);
+              REAL r4_4, i4_4;
+              REAL r4_12, i4_12;
+              REAL r4_20, i4_20;
+              REAL r4_28, i4_28;
+              {
+                REAL r5_4, i5_4;
+                REAL r5_20, i5_20;
+                wr = c_re(W[4 * l1]);
+                wi = c_im(W[4 * l1]);
+                tmpr = c_re(jp[4 * m]);
+                tmpi = c_im(jp[4 * m]);
+                r5_4 = ((wr * tmpr) - (wi * tmpi));
+                i5_4 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[20 * l1]);
+                wi = c_im(W[20 * l1]);
+                tmpr = c_re(jp[20 * m]);
+                tmpi = c_im(jp[20 * m]);
+                r5_20 = ((wr * tmpr) - (wi * tmpi));
+                i5_20 = ((wi * tmpr) + (wr * tmpi));
+                r4_4 = (r5_4 + r5_20);
+                i4_4 = (i5_4 + i5_20);
+                r4_20 = (r5_4 - r5_20);
+                i4_20 = (i5_4 - i5_20);
+              }
+              {
+                REAL r5_12, i5_12;
+                REAL r5_28, i5_28;
+                wr = c_re(W[12 * l1]);
+                wi = c_im(W[12 * l1]);
+                tmpr = c_re(jp[12 * m]);
+                tmpi = c_im(jp[12 * m]);
+                r5_12 = ((wr * tmpr) - (wi * tmpi));
+                i5_12 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[28 * l1]);
+                wi = c_im(W[28 * l1]);
+                tmpr = c_re(jp[28 * m]);
+                tmpi = c_im(jp[28 * m]);
+                r5_28 = ((wr * tmpr) - (wi * tmpi));
+                i5_28 = ((wi * tmpr) + (wr * tmpi));
+                r4_12 = (r5_12 + r5_28);
+                i4_12 = (i5_12 + i5_28);
+                r4_28 = (r5_12 - r5_28);
+                i4_28 = (i5_12 - i5_28);
+              }
+              r3_4 = (r4_4 + r4_12);
+              i3_4 = (i4_4 + i4_12);
+              r3_20 = (r4_4 - r4_12);
+              i3_20 = (i4_4 - i4_12);
+              r3_12 = (r4_20 + i4_28);
+              i3_12 = (i4_20 - r4_28);
+              r3_28 = (r4_20 - i4_28);
+              i3_28 = (i4_20 + r4_28);
 			      }
 			      r2_0 = (r3_0 + r3_4);
 			      i2_0 = (i3_0 + i3_4);
@@ -3822,8 +4197,8 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_12 = (i3_24 - tmpi);
 			      r2_28 = (r3_24 - tmpr);
 			      i2_28 = (i3_24 + tmpi);
-			 }
-			 {
+          }
+          {
 			      REAL r3_2, i3_2;
 			      REAL r3_6, i3_6;
 			      REAL r3_10, i3_10;
@@ -3833,112 +4208,112 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      REAL r3_26, i3_26;
 			      REAL r3_30, i3_30;
 			      {
-				   REAL r4_2, i4_2;
-				   REAL r4_10, i4_10;
-				   REAL r4_18, i4_18;
-				   REAL r4_26, i4_26;
-				   {
-					REAL r5_2, i5_2;
-					REAL r5_18, i5_18;
-					wr = c_re(W[2 * l1]);
-					wi = c_im(W[2 * l1]);
-					tmpr = c_re(jp[2 * m]);
-					tmpi = c_im(jp[2 * m]);
-					r5_2 = ((wr * tmpr) - (wi * tmpi));
-					i5_2 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[18 * l1]);
-					wi = c_im(W[18 * l1]);
-					tmpr = c_re(jp[18 * m]);
-					tmpi = c_im(jp[18 * m]);
-					r5_18 = ((wr * tmpr) - (wi * tmpi));
-					i5_18 = ((wi * tmpr) + (wr * tmpi));
-					r4_2 = (r5_2 + r5_18);
-					i4_2 = (i5_2 + i5_18);
-					r4_18 = (r5_2 - r5_18);
-					i4_18 = (i5_2 - i5_18);
-				   }
-				   {
-					REAL r5_10, i5_10;
-					REAL r5_26, i5_26;
-					wr = c_re(W[10 * l1]);
-					wi = c_im(W[10 * l1]);
-					tmpr = c_re(jp[10 * m]);
-					tmpi = c_im(jp[10 * m]);
-					r5_10 = ((wr * tmpr) - (wi * tmpi));
-					i5_10 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[26 * l1]);
-					wi = c_im(W[26 * l1]);
-					tmpr = c_re(jp[26 * m]);
-					tmpi = c_im(jp[26 * m]);
-					r5_26 = ((wr * tmpr) - (wi * tmpi));
-					i5_26 = ((wi * tmpr) + (wr * tmpi));
-					r4_10 = (r5_10 + r5_26);
-					i4_10 = (i5_10 + i5_26);
-					r4_26 = (r5_10 - r5_26);
-					i4_26 = (i5_10 - i5_26);
-				   }
-				   r3_2 = (r4_2 + r4_10);
-				   i3_2 = (i4_2 + i4_10);
-				   r3_18 = (r4_2 - r4_10);
-				   i3_18 = (i4_2 - i4_10);
-				   r3_10 = (r4_18 + i4_26);
-				   i3_10 = (i4_18 - r4_26);
-				   r3_26 = (r4_18 - i4_26);
-				   i3_26 = (i4_18 + r4_26);
+              REAL r4_2, i4_2;
+              REAL r4_10, i4_10;
+              REAL r4_18, i4_18;
+              REAL r4_26, i4_26;
+              {
+                REAL r5_2, i5_2;
+                REAL r5_18, i5_18;
+                wr = c_re(W[2 * l1]);
+                wi = c_im(W[2 * l1]);
+                tmpr = c_re(jp[2 * m]);
+                tmpi = c_im(jp[2 * m]);
+                r5_2 = ((wr * tmpr) - (wi * tmpi));
+                i5_2 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[18 * l1]);
+                wi = c_im(W[18 * l1]);
+                tmpr = c_re(jp[18 * m]);
+                tmpi = c_im(jp[18 * m]);
+                r5_18 = ((wr * tmpr) - (wi * tmpi));
+                i5_18 = ((wi * tmpr) + (wr * tmpi));
+                r4_2 = (r5_2 + r5_18);
+                i4_2 = (i5_2 + i5_18);
+                r4_18 = (r5_2 - r5_18);
+                i4_18 = (i5_2 - i5_18);
+              }
+              {
+                REAL r5_10, i5_10;
+                REAL r5_26, i5_26;
+                wr = c_re(W[10 * l1]);
+                wi = c_im(W[10 * l1]);
+                tmpr = c_re(jp[10 * m]);
+                tmpi = c_im(jp[10 * m]);
+                r5_10 = ((wr * tmpr) - (wi * tmpi));
+                i5_10 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[26 * l1]);
+                wi = c_im(W[26 * l1]);
+                tmpr = c_re(jp[26 * m]);
+                tmpi = c_im(jp[26 * m]);
+                r5_26 = ((wr * tmpr) - (wi * tmpi));
+                i5_26 = ((wi * tmpr) + (wr * tmpi));
+                r4_10 = (r5_10 + r5_26);
+                i4_10 = (i5_10 + i5_26);
+                r4_26 = (r5_10 - r5_26);
+                i4_26 = (i5_10 - i5_26);
+              }
+              r3_2 = (r4_2 + r4_10);
+              i3_2 = (i4_2 + i4_10);
+              r3_18 = (r4_2 - r4_10);
+              i3_18 = (i4_2 - i4_10);
+              r3_10 = (r4_18 + i4_26);
+              i3_10 = (i4_18 - r4_26);
+              r3_26 = (r4_18 - i4_26);
+              i3_26 = (i4_18 + r4_26);
 			      }
 			      {
-				   REAL r4_6, i4_6;
-				   REAL r4_14, i4_14;
-				   REAL r4_22, i4_22;
-				   REAL r4_30, i4_30;
-				   {
-					REAL r5_6, i5_6;
-					REAL r5_22, i5_22;
-					wr = c_re(W[6 * l1]);
-					wi = c_im(W[6 * l1]);
-					tmpr = c_re(jp[6 * m]);
-					tmpi = c_im(jp[6 * m]);
-					r5_6 = ((wr * tmpr) - (wi * tmpi));
-					i5_6 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[22 * l1]);
-					wi = c_im(W[22 * l1]);
-					tmpr = c_re(jp[22 * m]);
-					tmpi = c_im(jp[22 * m]);
-					r5_22 = ((wr * tmpr) - (wi * tmpi));
-					i5_22 = ((wi * tmpr) + (wr * tmpi));
-					r4_6 = (r5_6 + r5_22);
-					i4_6 = (i5_6 + i5_22);
-					r4_22 = (r5_6 - r5_22);
-					i4_22 = (i5_6 - i5_22);
-				   }
-				   {
-					REAL r5_14, i5_14;
-					REAL r5_30, i5_30;
-					wr = c_re(W[14 * l1]);
-					wi = c_im(W[14 * l1]);
-					tmpr = c_re(jp[14 * m]);
-					tmpi = c_im(jp[14 * m]);
-					r5_14 = ((wr * tmpr) - (wi * tmpi));
-					i5_14 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[30 * l1]);
-					wi = c_im(W[30 * l1]);
-					tmpr = c_re(jp[30 * m]);
-					tmpi = c_im(jp[30 * m]);
-					r5_30 = ((wr * tmpr) - (wi * tmpi));
-					i5_30 = ((wi * tmpr) + (wr * tmpi));
-					r4_14 = (r5_14 + r5_30);
-					i4_14 = (i5_14 + i5_30);
-					r4_30 = (r5_14 - r5_30);
-					i4_30 = (i5_14 - i5_30);
-				   }
-				   r3_6 = (r4_6 + r4_14);
-				   i3_6 = (i4_6 + i4_14);
-				   r3_22 = (r4_6 - r4_14);
-				   i3_22 = (i4_6 - i4_14);
-				   r3_14 = (r4_22 + i4_30);
-				   i3_14 = (i4_22 - r4_30);
-				   r3_30 = (r4_22 - i4_30);
-				   i3_30 = (i4_22 + r4_30);
+              REAL r4_6, i4_6;
+              REAL r4_14, i4_14;
+              REAL r4_22, i4_22;
+              REAL r4_30, i4_30;
+              {
+                REAL r5_6, i5_6;
+                REAL r5_22, i5_22;
+                wr = c_re(W[6 * l1]);
+                wi = c_im(W[6 * l1]);
+                tmpr = c_re(jp[6 * m]);
+                tmpi = c_im(jp[6 * m]);
+                r5_6 = ((wr * tmpr) - (wi * tmpi));
+                i5_6 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[22 * l1]);
+                wi = c_im(W[22 * l1]);
+                tmpr = c_re(jp[22 * m]);
+                tmpi = c_im(jp[22 * m]);
+                r5_22 = ((wr * tmpr) - (wi * tmpi));
+                i5_22 = ((wi * tmpr) + (wr * tmpi));
+                r4_6 = (r5_6 + r5_22);
+                i4_6 = (i5_6 + i5_22);
+                r4_22 = (r5_6 - r5_22);
+                i4_22 = (i5_6 - i5_22);
+              }
+              {
+                REAL r5_14, i5_14;
+                REAL r5_30, i5_30;
+                wr = c_re(W[14 * l1]);
+                wi = c_im(W[14 * l1]);
+                tmpr = c_re(jp[14 * m]);
+                tmpi = c_im(jp[14 * m]);
+                r5_14 = ((wr * tmpr) - (wi * tmpi));
+                i5_14 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[30 * l1]);
+                wi = c_im(W[30 * l1]);
+                tmpr = c_re(jp[30 * m]);
+                tmpi = c_im(jp[30 * m]);
+                r5_30 = ((wr * tmpr) - (wi * tmpi));
+                i5_30 = ((wi * tmpr) + (wr * tmpi));
+                r4_14 = (r5_14 + r5_30);
+                i4_14 = (i5_14 + i5_30);
+                r4_30 = (r5_14 - r5_30);
+                i4_30 = (i5_14 - i5_30);
+              }
+              r3_6 = (r4_6 + r4_14);
+              i3_6 = (i4_6 + i4_14);
+              r3_22 = (r4_6 - r4_14);
+              i3_22 = (i4_6 - i4_14);
+              r3_14 = (r4_22 + i4_30);
+              i3_14 = (i4_22 - r4_30);
+              r3_30 = (r4_22 - i4_30);
+              i3_30 = (i4_22 + r4_30);
 			      }
 			      r2_2 = (r3_2 + r3_6);
 			      i2_2 = (i3_2 + i3_6);
@@ -3960,70 +4335,70 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_14 = (i3_26 - tmpi);
 			      r2_30 = (r3_26 - tmpr);
 			      i2_30 = (i3_26 + tmpi);
-			 }
-			 r1_0 = (r2_0 + r2_2);
-			 i1_0 = (i2_0 + i2_2);
-			 r1_16 = (r2_0 - r2_2);
-			 i1_16 = (i2_0 - i2_2);
-			 tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
-			 tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
-			 r1_2 = (r2_4 + tmpr);
-			 i1_2 = (i2_4 + tmpi);
-			 r1_18 = (r2_4 - tmpr);
-			 i1_18 = (i2_4 - tmpi);
-			 tmpr = (0.707106781187 * (r2_10 + i2_10));
-			 tmpi = (0.707106781187 * (i2_10 - r2_10));
-			 r1_4 = (r2_8 + tmpr);
-			 i1_4 = (i2_8 + tmpi);
-			 r1_20 = (r2_8 - tmpr);
-			 i1_20 = (i2_8 - tmpi);
-			 tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
-			 tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
-			 r1_6 = (r2_12 + tmpr);
-			 i1_6 = (i2_12 + tmpi);
-			 r1_22 = (r2_12 - tmpr);
-			 i1_22 = (i2_12 - tmpi);
-			 r1_8 = (r2_16 + i2_18);
-			 i1_8 = (i2_16 - r2_18);
-			 r1_24 = (r2_16 - i2_18);
-			 i1_24 = (i2_16 + r2_18);
-			 tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
-			 tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
-			 r1_10 = (r2_20 + tmpr);
-			 i1_10 = (i2_20 - tmpi);
-			 r1_26 = (r2_20 - tmpr);
-			 i1_26 = (i2_20 + tmpi);
-			 tmpr = (0.707106781187 * (i2_26 - r2_26));
-			 tmpi = (0.707106781187 * (r2_26 + i2_26));
-			 r1_12 = (r2_24 + tmpr);
-			 i1_12 = (i2_24 - tmpi);
-			 r1_28 = (r2_24 - tmpr);
-			 i1_28 = (i2_24 + tmpi);
-			 tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
-			 tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
-			 r1_14 = (r2_28 + tmpr);
-			 i1_14 = (i2_28 - tmpi);
-			 r1_30 = (r2_28 - tmpr);
-			 i1_30 = (i2_28 + tmpi);
+          }
+          r1_0 = (r2_0 + r2_2);
+          i1_0 = (i2_0 + i2_2);
+          r1_16 = (r2_0 - r2_2);
+          i1_16 = (i2_0 - i2_2);
+          tmpr = ((0.923879532511 * r2_6) + (0.382683432365 * i2_6));
+          tmpi = ((0.923879532511 * i2_6) - (0.382683432365 * r2_6));
+          r1_2 = (r2_4 + tmpr);
+          i1_2 = (i2_4 + tmpi);
+          r1_18 = (r2_4 - tmpr);
+          i1_18 = (i2_4 - tmpi);
+          tmpr = (0.707106781187 * (r2_10 + i2_10));
+          tmpi = (0.707106781187 * (i2_10 - r2_10));
+          r1_4 = (r2_8 + tmpr);
+          i1_4 = (i2_8 + tmpi);
+          r1_20 = (r2_8 - tmpr);
+          i1_20 = (i2_8 - tmpi);
+          tmpr = ((0.382683432365 * r2_14) + (0.923879532511 * i2_14));
+          tmpi = ((0.382683432365 * i2_14) - (0.923879532511 * r2_14));
+          r1_6 = (r2_12 + tmpr);
+          i1_6 = (i2_12 + tmpi);
+          r1_22 = (r2_12 - tmpr);
+          i1_22 = (i2_12 - tmpi);
+          r1_8 = (r2_16 + i2_18);
+          i1_8 = (i2_16 - r2_18);
+          r1_24 = (r2_16 - i2_18);
+          i1_24 = (i2_16 + r2_18);
+          tmpr = ((0.923879532511 * i2_22) - (0.382683432365 * r2_22));
+          tmpi = ((0.923879532511 * r2_22) + (0.382683432365 * i2_22));
+          r1_10 = (r2_20 + tmpr);
+          i1_10 = (i2_20 - tmpi);
+          r1_26 = (r2_20 - tmpr);
+          i1_26 = (i2_20 + tmpi);
+          tmpr = (0.707106781187 * (i2_26 - r2_26));
+          tmpi = (0.707106781187 * (r2_26 + i2_26));
+          r1_12 = (r2_24 + tmpr);
+          i1_12 = (i2_24 - tmpi);
+          r1_28 = (r2_24 - tmpr);
+          i1_28 = (i2_24 + tmpi);
+          tmpr = ((0.382683432365 * i2_30) - (0.923879532511 * r2_30));
+          tmpi = ((0.382683432365 * r2_30) + (0.923879532511 * i2_30));
+          r1_14 = (r2_28 + tmpr);
+          i1_14 = (i2_28 - tmpi);
+          r1_30 = (r2_28 - tmpr);
+          i1_30 = (i2_28 + tmpi);
 		    }
 		    {
-			 REAL r2_1, i2_1;
-			 REAL r2_3, i2_3;
-			 REAL r2_5, i2_5;
-			 REAL r2_7, i2_7;
-			 REAL r2_9, i2_9;
-			 REAL r2_11, i2_11;
-			 REAL r2_13, i2_13;
-			 REAL r2_15, i2_15;
-			 REAL r2_17, i2_17;
-			 REAL r2_19, i2_19;
-			 REAL r2_21, i2_21;
-			 REAL r2_23, i2_23;
-			 REAL r2_25, i2_25;
-			 REAL r2_27, i2_27;
-			 REAL r2_29, i2_29;
-			 REAL r2_31, i2_31;
-			 {
+          REAL r2_1, i2_1;
+          REAL r2_3, i2_3;
+          REAL r2_5, i2_5;
+          REAL r2_7, i2_7;
+          REAL r2_9, i2_9;
+          REAL r2_11, i2_11;
+          REAL r2_13, i2_13;
+          REAL r2_15, i2_15;
+          REAL r2_17, i2_17;
+          REAL r2_19, i2_19;
+          REAL r2_21, i2_21;
+          REAL r2_23, i2_23;
+          REAL r2_25, i2_25;
+          REAL r2_27, i2_27;
+          REAL r2_29, i2_29;
+          REAL r2_31, i2_31;
+          {
 			      REAL r3_1, i3_1;
 			      REAL r3_5, i3_5;
 			      REAL r3_9, i3_9;
@@ -4033,112 +4408,112 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      REAL r3_25, i3_25;
 			      REAL r3_29, i3_29;
 			      {
-				   REAL r4_1, i4_1;
-				   REAL r4_9, i4_9;
-				   REAL r4_17, i4_17;
-				   REAL r4_25, i4_25;
-				   {
-					REAL r5_1, i5_1;
-					REAL r5_17, i5_17;
-					wr = c_re(W[1 * l1]);
-					wi = c_im(W[1 * l1]);
-					tmpr = c_re(jp[1 * m]);
-					tmpi = c_im(jp[1 * m]);
-					r5_1 = ((wr * tmpr) - (wi * tmpi));
-					i5_1 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[17 * l1]);
-					wi = c_im(W[17 * l1]);
-					tmpr = c_re(jp[17 * m]);
-					tmpi = c_im(jp[17 * m]);
-					r5_17 = ((wr * tmpr) - (wi * tmpi));
-					i5_17 = ((wi * tmpr) + (wr * tmpi));
-					r4_1 = (r5_1 + r5_17);
-					i4_1 = (i5_1 + i5_17);
-					r4_17 = (r5_1 - r5_17);
-					i4_17 = (i5_1 - i5_17);
-				   }
-				   {
-					REAL r5_9, i5_9;
-					REAL r5_25, i5_25;
-					wr = c_re(W[9 * l1]);
-					wi = c_im(W[9 * l1]);
-					tmpr = c_re(jp[9 * m]);
-					tmpi = c_im(jp[9 * m]);
-					r5_9 = ((wr * tmpr) - (wi * tmpi));
-					i5_9 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[25 * l1]);
-					wi = c_im(W[25 * l1]);
-					tmpr = c_re(jp[25 * m]);
-					tmpi = c_im(jp[25 * m]);
-					r5_25 = ((wr * tmpr) - (wi * tmpi));
-					i5_25 = ((wi * tmpr) + (wr * tmpi));
-					r4_9 = (r5_9 + r5_25);
-					i4_9 = (i5_9 + i5_25);
-					r4_25 = (r5_9 - r5_25);
-					i4_25 = (i5_9 - i5_25);
-				   }
-				   r3_1 = (r4_1 + r4_9);
-				   i3_1 = (i4_1 + i4_9);
-				   r3_17 = (r4_1 - r4_9);
-				   i3_17 = (i4_1 - i4_9);
-				   r3_9 = (r4_17 + i4_25);
-				   i3_9 = (i4_17 - r4_25);
-				   r3_25 = (r4_17 - i4_25);
-				   i3_25 = (i4_17 + r4_25);
+              REAL r4_1, i4_1;
+              REAL r4_9, i4_9;
+              REAL r4_17, i4_17;
+              REAL r4_25, i4_25;
+              {
+                REAL r5_1, i5_1;
+                REAL r5_17, i5_17;
+                wr = c_re(W[1 * l1]);
+                wi = c_im(W[1 * l1]);
+                tmpr = c_re(jp[1 * m]);
+                tmpi = c_im(jp[1 * m]);
+                r5_1 = ((wr * tmpr) - (wi * tmpi));
+                i5_1 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[17 * l1]);
+                wi = c_im(W[17 * l1]);
+                tmpr = c_re(jp[17 * m]);
+                tmpi = c_im(jp[17 * m]);
+                r5_17 = ((wr * tmpr) - (wi * tmpi));
+                i5_17 = ((wi * tmpr) + (wr * tmpi));
+                r4_1 = (r5_1 + r5_17);
+                i4_1 = (i5_1 + i5_17);
+                r4_17 = (r5_1 - r5_17);
+                i4_17 = (i5_1 - i5_17);
+              }
+              {
+                REAL r5_9, i5_9;
+                REAL r5_25, i5_25;
+                wr = c_re(W[9 * l1]);
+                wi = c_im(W[9 * l1]);
+                tmpr = c_re(jp[9 * m]);
+                tmpi = c_im(jp[9 * m]);
+                r5_9 = ((wr * tmpr) - (wi * tmpi));
+                i5_9 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[25 * l1]);
+                wi = c_im(W[25 * l1]);
+                tmpr = c_re(jp[25 * m]);
+                tmpi = c_im(jp[25 * m]);
+                r5_25 = ((wr * tmpr) - (wi * tmpi));
+                i5_25 = ((wi * tmpr) + (wr * tmpi));
+                r4_9 = (r5_9 + r5_25);
+                i4_9 = (i5_9 + i5_25);
+                r4_25 = (r5_9 - r5_25);
+                i4_25 = (i5_9 - i5_25);
+              }
+              r3_1 = (r4_1 + r4_9);
+              i3_1 = (i4_1 + i4_9);
+              r3_17 = (r4_1 - r4_9);
+              i3_17 = (i4_1 - i4_9);
+              r3_9 = (r4_17 + i4_25);
+              i3_9 = (i4_17 - r4_25);
+              r3_25 = (r4_17 - i4_25);
+              i3_25 = (i4_17 + r4_25);
 			      }
 			      {
-				   REAL r4_5, i4_5;
-				   REAL r4_13, i4_13;
-				   REAL r4_21, i4_21;
-				   REAL r4_29, i4_29;
-				   {
-					REAL r5_5, i5_5;
-					REAL r5_21, i5_21;
-					wr = c_re(W[5 * l1]);
-					wi = c_im(W[5 * l1]);
-					tmpr = c_re(jp[5 * m]);
-					tmpi = c_im(jp[5 * m]);
-					r5_5 = ((wr * tmpr) - (wi * tmpi));
-					i5_5 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[21 * l1]);
-					wi = c_im(W[21 * l1]);
-					tmpr = c_re(jp[21 * m]);
-					tmpi = c_im(jp[21 * m]);
-					r5_21 = ((wr * tmpr) - (wi * tmpi));
-					i5_21 = ((wi * tmpr) + (wr * tmpi));
-					r4_5 = (r5_5 + r5_21);
-					i4_5 = (i5_5 + i5_21);
-					r4_21 = (r5_5 - r5_21);
-					i4_21 = (i5_5 - i5_21);
-				   }
-				   {
-					REAL r5_13, i5_13;
-					REAL r5_29, i5_29;
-					wr = c_re(W[13 * l1]);
-					wi = c_im(W[13 * l1]);
-					tmpr = c_re(jp[13 * m]);
-					tmpi = c_im(jp[13 * m]);
-					r5_13 = ((wr * tmpr) - (wi * tmpi));
-					i5_13 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[29 * l1]);
-					wi = c_im(W[29 * l1]);
-					tmpr = c_re(jp[29 * m]);
-					tmpi = c_im(jp[29 * m]);
-					r5_29 = ((wr * tmpr) - (wi * tmpi));
-					i5_29 = ((wi * tmpr) + (wr * tmpi));
-					r4_13 = (r5_13 + r5_29);
-					i4_13 = (i5_13 + i5_29);
-					r4_29 = (r5_13 - r5_29);
-					i4_29 = (i5_13 - i5_29);
-				   }
-				   r3_5 = (r4_5 + r4_13);
-				   i3_5 = (i4_5 + i4_13);
-				   r3_21 = (r4_5 - r4_13);
-				   i3_21 = (i4_5 - i4_13);
-				   r3_13 = (r4_21 + i4_29);
-				   i3_13 = (i4_21 - r4_29);
-				   r3_29 = (r4_21 - i4_29);
-				   i3_29 = (i4_21 + r4_29);
+              REAL r4_5, i4_5;
+              REAL r4_13, i4_13;
+              REAL r4_21, i4_21;
+              REAL r4_29, i4_29;
+              {
+                REAL r5_5, i5_5;
+                REAL r5_21, i5_21;
+                wr = c_re(W[5 * l1]);
+                wi = c_im(W[5 * l1]);
+                tmpr = c_re(jp[5 * m]);
+                tmpi = c_im(jp[5 * m]);
+                r5_5 = ((wr * tmpr) - (wi * tmpi));
+                i5_5 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[21 * l1]);
+                wi = c_im(W[21 * l1]);
+                tmpr = c_re(jp[21 * m]);
+                tmpi = c_im(jp[21 * m]);
+                r5_21 = ((wr * tmpr) - (wi * tmpi));
+                i5_21 = ((wi * tmpr) + (wr * tmpi));
+                r4_5 = (r5_5 + r5_21);
+                i4_5 = (i5_5 + i5_21);
+                r4_21 = (r5_5 - r5_21);
+                i4_21 = (i5_5 - i5_21);
+              }
+              {
+                REAL r5_13, i5_13;
+                REAL r5_29, i5_29;
+                wr = c_re(W[13 * l1]);
+                wi = c_im(W[13 * l1]);
+                tmpr = c_re(jp[13 * m]);
+                tmpi = c_im(jp[13 * m]);
+                r5_13 = ((wr * tmpr) - (wi * tmpi));
+                i5_13 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[29 * l1]);
+                wi = c_im(W[29 * l1]);
+                tmpr = c_re(jp[29 * m]);
+                tmpi = c_im(jp[29 * m]);
+                r5_29 = ((wr * tmpr) - (wi * tmpi));
+                i5_29 = ((wi * tmpr) + (wr * tmpi));
+                r4_13 = (r5_13 + r5_29);
+                i4_13 = (i5_13 + i5_29);
+                r4_29 = (r5_13 - r5_29);
+                i4_29 = (i5_13 - i5_29);
+              }
+              r3_5 = (r4_5 + r4_13);
+              i3_5 = (i4_5 + i4_13);
+              r3_21 = (r4_5 - r4_13);
+              i3_21 = (i4_5 - i4_13);
+              r3_13 = (r4_21 + i4_29);
+              i3_13 = (i4_21 - r4_29);
+              r3_29 = (r4_21 - i4_29);
+              i3_29 = (i4_21 + r4_29);
 			      }
 			      r2_1 = (r3_1 + r3_5);
 			      i2_1 = (i3_1 + i3_5);
@@ -4160,8 +4535,8 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_13 = (i3_25 - tmpi);
 			      r2_29 = (r3_25 - tmpr);
 			      i2_29 = (i3_25 + tmpi);
-			 }
-			 {
+          }
+          {
 			      REAL r3_3, i3_3;
 			      REAL r3_7, i3_7;
 			      REAL r3_11, i3_11;
@@ -4171,112 +4546,112 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      REAL r3_27, i3_27;
 			      REAL r3_31, i3_31;
 			      {
-				   REAL r4_3, i4_3;
-				   REAL r4_11, i4_11;
-				   REAL r4_19, i4_19;
-				   REAL r4_27, i4_27;
-				   {
-					REAL r5_3, i5_3;
-					REAL r5_19, i5_19;
-					wr = c_re(W[3 * l1]);
-					wi = c_im(W[3 * l1]);
-					tmpr = c_re(jp[3 * m]);
-					tmpi = c_im(jp[3 * m]);
-					r5_3 = ((wr * tmpr) - (wi * tmpi));
-					i5_3 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[19 * l1]);
-					wi = c_im(W[19 * l1]);
-					tmpr = c_re(jp[19 * m]);
-					tmpi = c_im(jp[19 * m]);
-					r5_19 = ((wr * tmpr) - (wi * tmpi));
-					i5_19 = ((wi * tmpr) + (wr * tmpi));
-					r4_3 = (r5_3 + r5_19);
-					i4_3 = (i5_3 + i5_19);
-					r4_19 = (r5_3 - r5_19);
-					i4_19 = (i5_3 - i5_19);
-				   }
-				   {
-					REAL r5_11, i5_11;
-					REAL r5_27, i5_27;
-					wr = c_re(W[11 * l1]);
-					wi = c_im(W[11 * l1]);
-					tmpr = c_re(jp[11 * m]);
-					tmpi = c_im(jp[11 * m]);
-					r5_11 = ((wr * tmpr) - (wi * tmpi));
-					i5_11 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[27 * l1]);
-					wi = c_im(W[27 * l1]);
-					tmpr = c_re(jp[27 * m]);
-					tmpi = c_im(jp[27 * m]);
-					r5_27 = ((wr * tmpr) - (wi * tmpi));
-					i5_27 = ((wi * tmpr) + (wr * tmpi));
-					r4_11 = (r5_11 + r5_27);
-					i4_11 = (i5_11 + i5_27);
-					r4_27 = (r5_11 - r5_27);
-					i4_27 = (i5_11 - i5_27);
-				   }
-				   r3_3 = (r4_3 + r4_11);
-				   i3_3 = (i4_3 + i4_11);
-				   r3_19 = (r4_3 - r4_11);
-				   i3_19 = (i4_3 - i4_11);
-				   r3_11 = (r4_19 + i4_27);
-				   i3_11 = (i4_19 - r4_27);
-				   r3_27 = (r4_19 - i4_27);
-				   i3_27 = (i4_19 + r4_27);
+              REAL r4_3, i4_3;
+              REAL r4_11, i4_11;
+              REAL r4_19, i4_19;
+              REAL r4_27, i4_27;
+              {
+                REAL r5_3, i5_3;
+                REAL r5_19, i5_19;
+                wr = c_re(W[3 * l1]);
+                wi = c_im(W[3 * l1]);
+                tmpr = c_re(jp[3 * m]);
+                tmpi = c_im(jp[3 * m]);
+                r5_3 = ((wr * tmpr) - (wi * tmpi));
+                i5_3 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[19 * l1]);
+                wi = c_im(W[19 * l1]);
+                tmpr = c_re(jp[19 * m]);
+                tmpi = c_im(jp[19 * m]);
+                r5_19 = ((wr * tmpr) - (wi * tmpi));
+                i5_19 = ((wi * tmpr) + (wr * tmpi));
+                r4_3 = (r5_3 + r5_19);
+                i4_3 = (i5_3 + i5_19);
+                r4_19 = (r5_3 - r5_19);
+                i4_19 = (i5_3 - i5_19);
+              }
+              {
+                REAL r5_11, i5_11;
+                REAL r5_27, i5_27;
+                wr = c_re(W[11 * l1]);
+                wi = c_im(W[11 * l1]);
+                tmpr = c_re(jp[11 * m]);
+                tmpi = c_im(jp[11 * m]);
+                r5_11 = ((wr * tmpr) - (wi * tmpi));
+                i5_11 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[27 * l1]);
+                wi = c_im(W[27 * l1]);
+                tmpr = c_re(jp[27 * m]);
+                tmpi = c_im(jp[27 * m]);
+                r5_27 = ((wr * tmpr) - (wi * tmpi));
+                i5_27 = ((wi * tmpr) + (wr * tmpi));
+                r4_11 = (r5_11 + r5_27);
+                i4_11 = (i5_11 + i5_27);
+                r4_27 = (r5_11 - r5_27);
+                i4_27 = (i5_11 - i5_27);
+              }
+              r3_3 = (r4_3 + r4_11);
+              i3_3 = (i4_3 + i4_11);
+              r3_19 = (r4_3 - r4_11);
+              i3_19 = (i4_3 - i4_11);
+              r3_11 = (r4_19 + i4_27);
+              i3_11 = (i4_19 - r4_27);
+              r3_27 = (r4_19 - i4_27);
+              i3_27 = (i4_19 + r4_27);
 			      }
 			      {
-				   REAL r4_7, i4_7;
-				   REAL r4_15, i4_15;
-				   REAL r4_23, i4_23;
-				   REAL r4_31, i4_31;
-				   {
-					REAL r5_7, i5_7;
-					REAL r5_23, i5_23;
-					wr = c_re(W[7 * l1]);
-					wi = c_im(W[7 * l1]);
-					tmpr = c_re(jp[7 * m]);
-					tmpi = c_im(jp[7 * m]);
-					r5_7 = ((wr * tmpr) - (wi * tmpi));
-					i5_7 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[23 * l1]);
-					wi = c_im(W[23 * l1]);
-					tmpr = c_re(jp[23 * m]);
-					tmpi = c_im(jp[23 * m]);
-					r5_23 = ((wr * tmpr) - (wi * tmpi));
-					i5_23 = ((wi * tmpr) + (wr * tmpi));
-					r4_7 = (r5_7 + r5_23);
-					i4_7 = (i5_7 + i5_23);
-					r4_23 = (r5_7 - r5_23);
-					i4_23 = (i5_7 - i5_23);
-				   }
-				   {
-					REAL r5_15, i5_15;
-					REAL r5_31, i5_31;
-					wr = c_re(W[15 * l1]);
-					wi = c_im(W[15 * l1]);
-					tmpr = c_re(jp[15 * m]);
-					tmpi = c_im(jp[15 * m]);
-					r5_15 = ((wr * tmpr) - (wi * tmpi));
-					i5_15 = ((wi * tmpr) + (wr * tmpi));
-					wr = c_re(W[31 * l1]);
-					wi = c_im(W[31 * l1]);
-					tmpr = c_re(jp[31 * m]);
-					tmpi = c_im(jp[31 * m]);
-					r5_31 = ((wr * tmpr) - (wi * tmpi));
-					i5_31 = ((wi * tmpr) + (wr * tmpi));
-					r4_15 = (r5_15 + r5_31);
-					i4_15 = (i5_15 + i5_31);
-					r4_31 = (r5_15 - r5_31);
-					i4_31 = (i5_15 - i5_31);
-				   }
-				   r3_7 = (r4_7 + r4_15);
-				   i3_7 = (i4_7 + i4_15);
-				   r3_23 = (r4_7 - r4_15);
-				   i3_23 = (i4_7 - i4_15);
-				   r3_15 = (r4_23 + i4_31);
-				   i3_15 = (i4_23 - r4_31);
-				   r3_31 = (r4_23 - i4_31);
-				   i3_31 = (i4_23 + r4_31);
+              REAL r4_7, i4_7;
+              REAL r4_15, i4_15;
+              REAL r4_23, i4_23;
+              REAL r4_31, i4_31;
+              {
+                REAL r5_7, i5_7;
+                REAL r5_23, i5_23;
+                wr = c_re(W[7 * l1]);
+                wi = c_im(W[7 * l1]);
+                tmpr = c_re(jp[7 * m]);
+                tmpi = c_im(jp[7 * m]);
+                r5_7 = ((wr * tmpr) - (wi * tmpi));
+                i5_7 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[23 * l1]);
+                wi = c_im(W[23 * l1]);
+                tmpr = c_re(jp[23 * m]);
+                tmpi = c_im(jp[23 * m]);
+                r5_23 = ((wr * tmpr) - (wi * tmpi));
+                i5_23 = ((wi * tmpr) + (wr * tmpi));
+                r4_7 = (r5_7 + r5_23);
+                i4_7 = (i5_7 + i5_23);
+                r4_23 = (r5_7 - r5_23);
+                i4_23 = (i5_7 - i5_23);
+              }
+              {
+                REAL r5_15, i5_15;
+                REAL r5_31, i5_31;
+                wr = c_re(W[15 * l1]);
+                wi = c_im(W[15 * l1]);
+                tmpr = c_re(jp[15 * m]);
+                tmpi = c_im(jp[15 * m]);
+                r5_15 = ((wr * tmpr) - (wi * tmpi));
+                i5_15 = ((wi * tmpr) + (wr * tmpi));
+                wr = c_re(W[31 * l1]);
+                wi = c_im(W[31 * l1]);
+                tmpr = c_re(jp[31 * m]);
+                tmpi = c_im(jp[31 * m]);
+                r5_31 = ((wr * tmpr) - (wi * tmpi));
+                i5_31 = ((wi * tmpr) + (wr * tmpi));
+                r4_15 = (r5_15 + r5_31);
+                i4_15 = (i5_15 + i5_31);
+                r4_31 = (r5_15 - r5_31);
+                i4_31 = (i5_15 - i5_31);
+              }
+              r3_7 = (r4_7 + r4_15);
+              i3_7 = (i4_7 + i4_15);
+              r3_23 = (r4_7 - r4_15);
+              i3_23 = (i4_7 - i4_15);
+              r3_15 = (r4_23 + i4_31);
+              i3_15 = (i4_23 - r4_31);
+              r3_31 = (r4_23 - i4_31);
+              i3_31 = (i4_23 + r4_31);
 			      }
 			      r2_3 = (r3_3 + r3_7);
 			      i2_3 = (i3_3 + i3_7);
@@ -4298,51 +4673,51 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 			      i2_15 = (i3_27 - tmpi);
 			      r2_31 = (r3_27 - tmpr);
 			      i2_31 = (i3_27 + tmpi);
-			 }
-			 r1_1 = (r2_1 + r2_3);
-			 i1_1 = (i2_1 + i2_3);
-			 r1_17 = (r2_1 - r2_3);
-			 i1_17 = (i2_1 - i2_3);
-			 tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
-			 tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
-			 r1_3 = (r2_5 + tmpr);
-			 i1_3 = (i2_5 + tmpi);
-			 r1_19 = (r2_5 - tmpr);
-			 i1_19 = (i2_5 - tmpi);
-			 tmpr = (0.707106781187 * (r2_11 + i2_11));
-			 tmpi = (0.707106781187 * (i2_11 - r2_11));
-			 r1_5 = (r2_9 + tmpr);
-			 i1_5 = (i2_9 + tmpi);
-			 r1_21 = (r2_9 - tmpr);
-			 i1_21 = (i2_9 - tmpi);
-			 tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
-			 tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
-			 r1_7 = (r2_13 + tmpr);
-			 i1_7 = (i2_13 + tmpi);
-			 r1_23 = (r2_13 - tmpr);
-			 i1_23 = (i2_13 - tmpi);
-			 r1_9 = (r2_17 + i2_19);
-			 i1_9 = (i2_17 - r2_19);
-			 r1_25 = (r2_17 - i2_19);
-			 i1_25 = (i2_17 + r2_19);
-			 tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
-			 tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
-			 r1_11 = (r2_21 + tmpr);
-			 i1_11 = (i2_21 - tmpi);
-			 r1_27 = (r2_21 - tmpr);
-			 i1_27 = (i2_21 + tmpi);
-			 tmpr = (0.707106781187 * (i2_27 - r2_27));
-			 tmpi = (0.707106781187 * (r2_27 + i2_27));
-			 r1_13 = (r2_25 + tmpr);
-			 i1_13 = (i2_25 - tmpi);
-			 r1_29 = (r2_25 - tmpr);
-			 i1_29 = (i2_25 + tmpi);
-			 tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
-			 tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
-			 r1_15 = (r2_29 + tmpr);
-			 i1_15 = (i2_29 - tmpi);
-			 r1_31 = (r2_29 - tmpr);
-			 i1_31 = (i2_29 + tmpi);
+          }
+          r1_1 = (r2_1 + r2_3);
+          i1_1 = (i2_1 + i2_3);
+          r1_17 = (r2_1 - r2_3);
+          i1_17 = (i2_1 - i2_3);
+          tmpr = ((0.923879532511 * r2_7) + (0.382683432365 * i2_7));
+          tmpi = ((0.923879532511 * i2_7) - (0.382683432365 * r2_7));
+          r1_3 = (r2_5 + tmpr);
+          i1_3 = (i2_5 + tmpi);
+          r1_19 = (r2_5 - tmpr);
+          i1_19 = (i2_5 - tmpi);
+          tmpr = (0.707106781187 * (r2_11 + i2_11));
+          tmpi = (0.707106781187 * (i2_11 - r2_11));
+          r1_5 = (r2_9 + tmpr);
+          i1_5 = (i2_9 + tmpi);
+          r1_21 = (r2_9 - tmpr);
+          i1_21 = (i2_9 - tmpi);
+          tmpr = ((0.382683432365 * r2_15) + (0.923879532511 * i2_15));
+          tmpi = ((0.382683432365 * i2_15) - (0.923879532511 * r2_15));
+          r1_7 = (r2_13 + tmpr);
+          i1_7 = (i2_13 + tmpi);
+          r1_23 = (r2_13 - tmpr);
+          i1_23 = (i2_13 - tmpi);
+          r1_9 = (r2_17 + i2_19);
+          i1_9 = (i2_17 - r2_19);
+          r1_25 = (r2_17 - i2_19);
+          i1_25 = (i2_17 + r2_19);
+          tmpr = ((0.923879532511 * i2_23) - (0.382683432365 * r2_23));
+          tmpi = ((0.923879532511 * r2_23) + (0.382683432365 * i2_23));
+          r1_11 = (r2_21 + tmpr);
+          i1_11 = (i2_21 - tmpi);
+          r1_27 = (r2_21 - tmpr);
+          i1_27 = (i2_21 + tmpi);
+          tmpr = (0.707106781187 * (i2_27 - r2_27));
+          tmpi = (0.707106781187 * (r2_27 + i2_27));
+          r1_13 = (r2_25 + tmpr);
+          i1_13 = (i2_25 - tmpi);
+          r1_29 = (r2_25 - tmpr);
+          i1_29 = (i2_25 + tmpi);
+          tmpr = ((0.382683432365 * i2_31) - (0.923879532511 * r2_31));
+          tmpi = ((0.382683432365 * r2_31) + (0.923879532511 * i2_31));
+          r1_15 = (r2_29 + tmpr);
+          i1_15 = (i2_29 - tmpi);
+          r1_31 = (r2_29 - tmpr);
+          i1_31 = (i2_29 + tmpi);
 		    }
 		    c_re(kp[0 * m]) = (r1_0 + r1_1);
 		    c_im(kp[0 * m]) = (i1_0 + i1_1);
@@ -4436,174 +4811,201 @@ void fft_twiddle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, 
 		    c_im(kp[15 * m]) = (i1_30 - tmpi);
 		    c_re(kp[31 * m]) = (r1_30 - tmpr);
 		    c_im(kp[31 * m]) = (i1_30 + tmpi);
-	       }
+      }
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_twiddle_32_seq(a, ab, in, out, W, nW, nWdn, m);
 	  fft_twiddle_32_seq(ab, b, in, out, W, nW, nWdn, m);
-     }
+  }
 }
 void fft_unshuffle_32(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 32;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
-          #pragma omp task untied
+
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_32,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_32(a, ab, in, out, m);
-          #pragma omp task untied
+#endif
+    
+#if 0
+    kaapic_spawn(0, 5, fft_unshuffle_32,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
+#else
+#pragma omp task untied
 	  fft_unshuffle_32(ab, b, in, out, m);
-          #pragma omp taskwait
-     }
+#endif
+    
+#if 0
+    kaapic_sync();
+#else
+#pragma omp taskwait
+#endif
+  }
 }
 void fft_unshuffle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 {
-     int i;
-     const COMPLEX *ip;
-     COMPLEX *jp;
-     if ((b - a) < 128) {
+  int i;
+  const COMPLEX *ip;
+  COMPLEX *jp;
+  if ((b - a) < 128) {
 	  ip = in + a * 32;
 	  for (i = a; i < b; ++i) {
-	       jp = out + i;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
-	       jp += 2 * m;
-	       jp[0] = ip[0];
-	       jp[m] = ip[1];
-	       ip += 2;
+      jp = out + i;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
+      jp += 2 * m;
+      jp[0] = ip[0];
+      jp[m] = ip[1];
+      ip += 2;
 	  }
-     } else {
+  } else {
 	  int ab = (a + b) / 2;
 	  fft_unshuffle_32_seq(a, ab, in, out, m);
 	  fft_unshuffle_32_seq(ab, b, in, out, m);
-     }
+  }
 }
 /* end of machine-generated code */
 
@@ -4624,180 +5026,284 @@ void fft_unshuffle_32_seq(int a, int b, COMPLEX * in, COMPLEX * out, int m)
  */
 void fft_aux(int n, COMPLEX * in, COMPLEX * out, int *factors, COMPLEX * W, int nW)
 {
-     int r, m;
-     int k;
-
-     /* special cases */
-     if (n == 32) {
+  int r, m;
+  int k;
+  
+  /* special cases */
+  if (n == 32) {
 	  fft_base_32(in, out);
 	  return;
-     }
-     if (n == 16) {
+  }
+  if (n == 16) {
 	  fft_base_16(in, out);
 	  return;
-     }
-     if (n == 8) {
+  }
+  if (n == 8) {
 	  fft_base_8(in, out);
 	  return;
-     }
-     if (n == 4) {
+  }
+  if (n == 4) {
 	  fft_base_4(in, out);
 	  return;
-     }
-     if (n == 2) {
+  }
+  if (n == 2) {
 	  fft_base_2(in, out);
 	  return;
-     }
-     /* 
-      * the cases n == 3, n == 5, and maybe 7 should be implemented as well
-      */
-
-     r = *factors;
-     m = n / r;
-
-     if (r < n) {
+  }
+  /* 
+   * the cases n == 3, n == 5, and maybe 7 should be implemented as well
+   */
+  
+  r = *factors;
+  m = n / r;
+  
+  if (r < n) {
 	  /* 
 	   * split the DFT of length n into r DFTs of length n/r,  and
 	   * recurse 
 	   */
 	  if (r == 32) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 5, fft_unshuffle_32,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                   );
 #else
-               #pragma omp task untied
-	       fft_unshuffle_32(0, m, in, out, m);
+#pragma omp task untied
+      fft_unshuffle_32(0, m, in, out, m);
 #endif
 	  } else if (r == 16) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 5, fft_unshuffle_16,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                   );      
 #else
-               #pragma omp task untied
-	       fft_unshuffle_16(0, m, in, out, m);
+#pragma omp task untied
+      fft_unshuffle_16(0, m, in, out, m);
 #endif
 	  } else if (r == 8) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 5, fft_unshuffle_8,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                   );      
 #else
-               #pragma omp task untied
-	       fft_unshuffle_8(0, m, in, out, m);
+#pragma omp task untied
+      fft_unshuffle_8(0, m, in, out, m);
 #endif
 	  } else if (r == 4) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 5, fft_unshuffle_4,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                   );      
 #else
-               #pragma omp task untied
-	       fft_unshuffle_4(0, m, in, out, m);
+#pragma omp task untied
+      fft_unshuffle_4(0, m, in, out, m);
 #endif
 	  } else if (r == 2) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 5, fft_unshuffle_2,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                   );
 #else
-               #pragma omp task untied
-	       fft_unshuffle_2(0, m, in, out, m);
+#pragma omp task untied
+      fft_unshuffle_2(0, m, in, out, m);
 #endif
 	  } else
-	       unshuffle(0, m, in, out, r, m);
-
+      unshuffle(0, m, in, out, r, m);
+    
 #if defined(BOTS_KAAPI)
-       kaapic_sync();
+    kaapic_sync();
 #else
-          #pragma omp taskwait
+#pragma omp taskwait
 #endif
-
+    
 	  for (k = 0; k < n; k += m) {
 #if defined(BOTS_KAAPI)
+      kaapic_spawn(0, 6, fft_aux,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out + k,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in + k,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (int*)(factors + 1),
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW
+                   );      
 #else
-         #pragma omp task untied
-	       fft_aux(m, out + k, in + k, factors + 1, W, nW);
+#pragma omp task untied
+      fft_aux(m, out + k, in + k, factors + 1, W, nW);
 #endif
 	  }
-       
+    
 #if defined(BOTS_KAAPI)
-       kaapic_sync();
+    kaapic_sync();
 #else
-      #pragma omp taskwait
+#pragma omp taskwait
 #endif
-   }
-     /*
-      * now multiply by the twiddle factors, and perform m FFTs
-      * of length r
-      */
-     if (r == 2) {
+  }
+  /*
+   * now multiply by the twiddle factors, and perform m FFTs
+   * of length r
+   */
+  if (r == 2) {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 8, fft_twiddle_2,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_2(0, m, in, out, W, nW, nW / n, m);
 #endif
-     } else if (r == 4) {
+  } else if (r == 4) {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 8, fft_twiddle_4,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_4(0, m, in, out, W, nW, nW / n, m);
 #endif
-     } else if (r == 8) {
+  } else if (r == 8) {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 8, fft_twiddle_8,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_8(0, m, in, out, W, nW, nW / n, m);
 #endif
-     } else if (r == 16) {
+  } else if (r == 16) {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 8, fft_twiddle_16,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_16(0, m, in, out, W, nW, nW / n, m);
 #endif
-     } else if (r == 32) {
+  } else if (r == 32) {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 8, fft_twiddle_32,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_32(0, m, in, out, W, nW, nW / n, m);
 #endif
-     } else {
+  } else {
 #if defined(BOTS_KAAPI)
+    kaapic_spawn(0, 9, fft_twiddle_gen,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nW / n,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, r,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, m
+                 );
 #else
-    #pragma omp task untied
+#pragma omp task untied
 	  fft_twiddle_gen(0, m, in, out, W, nW, nW / n, r, m);
 #endif
-     }
+  }
   
 #if defined(BOTS_KAAPI)
   kaapic_sync();
 #else
-     #pragma omp taskwait
+#pragma omp taskwait
 #endif
-
-     return;
+  
+  return;
 }
 
 void fft_aux_seq(int n, COMPLEX * in, COMPLEX * out, int *factors, COMPLEX * W, int nW)
 {
-     int r, m;
-     int k;
-
-     /* special cases */
-     if (n == 32) {
+  int r, m;
+  int k;
+  
+  /* special cases */
+  if (n == 32) {
 	  fft_base_32(in, out);
 	  return;
-     }
-     if (n == 16) {
+  }
+  if (n == 16) {
 	  fft_base_16(in, out);
 	  return;
-     }
-     if (n == 8) {
+  }
+  if (n == 8) {
 	  fft_base_8(in, out);
 	  return;
-     }
-     if (n == 4) {
+  }
+  if (n == 4) {
 	  fft_base_4(in, out);
 	  return;
-     }
-     if (n == 2) {
+  }
+  if (n == 2) {
 	  fft_base_2(in, out);
 	  return;
-     }
-     /* 
-      * the cases n == 3, n == 5, and maybe 7 should be implemented as well
-      */
-
-     r = *factors;
-     m = n / r;
-
-     if (r < n) {
+  }
+  /* 
+   * the cases n == 3, n == 5, and maybe 7 should be implemented as well
+   */
+  
+  r = *factors;
+  m = n / r;
+  
+  if (r < n) {
 	  /* 
 	   * split the DFT of length n into r DFTs of length n/r,  and
 	   * recurse 
@@ -4808,121 +5314,134 @@ void fft_aux_seq(int n, COMPLEX * in, COMPLEX * out, int *factors, COMPLEX * W, 
 	  else if (r ==  4) fft_unshuffle_4_seq(0, m, in, out, m);
 	  else if (r ==  2) fft_unshuffle_2_seq(0, m, in, out, m);
 	  else              unshuffle_seq(0, m, in, out, r, m);
-
+    
 	  for (k = 0; k < n; k += m) {
-	       fft_aux_seq(m, out + k, in + k, factors + 1, W, nW);
+      fft_aux_seq(m, out + k, in + k, factors + 1, W, nW);
 	  }
-     }
-     /* 
-      * now multiply by the twiddle factors, and perform m FFTs
-      * of length r
-      */
-     if      (r ==  2) fft_twiddle_2_seq(0, m, in, out, W, nW, nW / n, m);
-     else if (r ==  4) fft_twiddle_4_seq(0, m, in, out, W, nW, nW / n, m);
-     else if (r ==  8) fft_twiddle_8_seq(0, m, in, out, W, nW, nW / n, m);
-     else if (r == 16) fft_twiddle_16_seq(0, m, in, out, W, nW, nW / n, m);
-     else if (r == 32) fft_twiddle_32_seq(0, m, in, out, W, nW, nW / n, m);
-     else              fft_twiddle_gen_seq(0, m, in, out, W, nW, nW / n, r, m);
-
-     return;
+  }
+  /* 
+   * now multiply by the twiddle factors, and perform m FFTs
+   * of length r
+   */
+  if      (r ==  2) fft_twiddle_2_seq(0, m, in, out, W, nW, nW / n, m);
+  else if (r ==  4) fft_twiddle_4_seq(0, m, in, out, W, nW, nW / n, m);
+  else if (r ==  8) fft_twiddle_8_seq(0, m, in, out, W, nW, nW / n, m);
+  else if (r == 16) fft_twiddle_16_seq(0, m, in, out, W, nW, nW / n, m);
+  else if (r == 32) fft_twiddle_32_seq(0, m, in, out, W, nW, nW / n, m);
+  else              fft_twiddle_gen_seq(0, m, in, out, W, nW, nW / n, r, m);
+  
+  return;
 }
 /*
  * user interface for fft_aux
  */
 void fft(int n, COMPLEX * in, COMPLEX * out)
 {
-     int factors[40];		/* allows FFTs up to at least 3^40 */
-     int *p = factors;
-     int l = n;
-     int r;
-     COMPLEX *W;
-
-      bots_message("Computing coefficients ");
-     W = (COMPLEX *) malloc((n + 1) * sizeof(COMPLEX));
-#if defined(BOTS_KAAPI)
-#else
-     #pragma omp parallel
-     #pragma omp single
-     #pragma omp task untied
-#endif
-     compute_w_coefficients(n, 0, n / 2, W);
-     bots_message(" completed!\n");
-
-     /* 
-      * find factors of n, first 8, then 4 and then primes in ascending
-      * order 
-      */
-     do {
-      r = factor(l);
-      *p++ = r;
-      l /= r;
-     } while (l > 1);
-
-     bots_message("Computing FFT ");
+  int factors[40];		/* allows FFTs up to at least 3^40 */
+  int *p = factors;
+  int l = n;
+  int r;
+  COMPLEX *W;
+  
+  bots_message("Computing coefficients ");
+  W = (COMPLEX *) malloc((n + 1) * sizeof(COMPLEX));
 #if defined(BOTS_KAAPI)
   kaapic_begin_parallel( KAAPIC_FLAG_DEFAULT );
+#endif
+  
+#if defined(BOTS_KAAPI)
+  kaapic_spawn(0, 4, compute_w_coefficients,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, n,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, (n/2),
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W
+               );
+  kaapic_sync();
+#else
+#pragma omp parallel
+#pragma omp single
+#pragma omp task untied
+  compute_w_coefficients(n, 0, n / 2, W);
+#endif
+  bots_message(" completed!\n");
+  
+  /* 
+   * find factors of n, first 8, then 4 and then primes in ascending
+   * order 
+   */
+  do {
+    r = factor(l);
+    *p++ = r;
+    l /= r;
+  } while (l > 1);
+  
+  bots_message("Computing FFT ");
+#if defined(BOTS_KAAPI)
   kaapic_spawn(0, 6, fft_aux,
                KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, (int)n,
-               KAAPIC_MODE_R, KAAPIC_TYPE_PTR, 1, (COMPLEX *)in,
-               KAAPIC_MODE_W, KAAPIC_TYPE_PTR, 1, (COMPLEX *)out,
-               KAAPIC_MODE_R, KAAPIC_TYPE_INT, 40, (int*)factors,
-               KAAPIC_MODE_R, KAAPIC_TYPE_PTR, 1, (COMPLEX *)W,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, (int*)factors,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, W,
                KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, (int)n
                );
   kaapic_sync();
-  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );
 #else
-     #pragma omp parallel
-     #pragma omp single
-     #pragma omp task untied
-     fft_aux(n, in, out, factors, W, n);
+#pragma omp parallel
+#pragma omp single
+#pragma omp task untied
+  fft_aux(n, in, out, factors, W, n);
 #endif
-     bots_message(" completed!\n");
-
-     free(W);
-     return;
+  bots_message(" completed!\n");
+  
+#if defined(BOTS_KAAPI)
+  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );  
+#endif
+  
+  free(W);
+  return;
 }
 
 void fft_seq(int n, COMPLEX * in, COMPLEX * out)
 {
-     int factors[40];		/* allows FFTs up to at least 3^40 */
-     int *p = factors;
-     int l = n;
-     int r;
-     COMPLEX *W;
-
-     W = (COMPLEX *) malloc((n + 1) * sizeof(COMPLEX));
-     compute_w_coefficients_seq(n, 0, n / 2, W);
-
-     /* 
-      * find factors of n, first 8, then 4 and then primes in ascending
-      * order 
-      */
-     do {
+  int factors[40];		/* allows FFTs up to at least 3^40 */
+  int *p = factors;
+  int l = n;
+  int r;
+  COMPLEX *W;
+  
+  W = (COMPLEX *) malloc((n + 1) * sizeof(COMPLEX));
+  compute_w_coefficients_seq(n, 0, n / 2, W);
+  
+  /* 
+   * find factors of n, first 8, then 4 and then primes in ascending
+   * order 
+   */
+  do {
 	  r = factor(l);
 	  *p++ = r;
 	  l /= r;
-     } while (l > 1);
-
-     fft_aux_seq(n, in, out, factors, W, n);
-
-     free(W);
-     return;
+  } while (l > 1);
+  
+  fft_aux_seq(n, in, out, factors, W, n);
+  
+  free(W);
+  return;
 }
 int test_correctness(int n, COMPLEX *out1, COMPLEX *out2)
 {
   int i;
   double a,d,error = 0.0;
-
+  
   for (i = 0; i < n; ++i) {
-       a = sqrt((c_re(out1[i]) - c_re(out2[i])) *
-		(c_re(out1[i]) - c_re(out2[i])) +
-		(c_im(out1[i]) - c_im(out2[i])) *
-		(c_im(out1[i]) - c_im(out2[i])));
-       d =  sqrt(c_re(out2[i]) * c_re(out2[i]) + 
-		 c_im(out2[i]) * c_im(out2[i]));
-       if (d < -1.0e-10 || d > 1.0e-10) a /= d;
-       if (a > error) error = a;
+    a = sqrt((c_re(out1[i]) - c_re(out2[i])) *
+             (c_re(out1[i]) - c_re(out2[i])) +
+             (c_im(out1[i]) - c_im(out2[i])) *
+             (c_im(out1[i]) - c_im(out2[i])));
+    d =  sqrt(c_re(out2[i]) * c_re(out2[i]) + 
+              c_im(out2[i]) * c_im(out2[i]));
+    if (d < -1.0e-10 || d > 1.0e-10) a /= d;
+    if (a > error) error = a;
   }
   bots_message("relative error=%e\n", error);
   if (error > 1e-3) return BOTS_RESULT_UNSUCCESSFUL;
@@ -4932,7 +5451,7 @@ int test_correctness(int n, COMPLEX *out1, COMPLEX *out2)
 void fft_init (void)
 {
 #if defined(BOTS_KAAPI)
-  kaapic_init( KAAPIC_START_ONLY_MAIN );
+  kaapic_init( 0 );
 #endif
 }
 
