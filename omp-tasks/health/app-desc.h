@@ -37,12 +37,16 @@
    struct Village *top;\
    read_input_data(bots_arg_file);
 
+void sim_village_par_init(void);
+void sim_village_par_fini(void);
+
 #define KERNEL_INIT \
-   allocate_village(&top, NULL, NULL, sim_level, 0);
+   allocate_village(&top, NULL, NULL, sim_level, 0);\
+   sim_village_par_init();
 
 #define KERNEL_CALL sim_village_main_par(top);
  
-#define KERNEL_FINI
+#define KERNEL_FINI sim_village_par_fini();
 
 //#define KERNEL_SEQ_INIT
 //#define KERNEL_SEQ_CALL

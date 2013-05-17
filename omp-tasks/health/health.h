@@ -27,6 +27,10 @@
 #define IR 2836
 #define MASK 123459876
 
+#if defined(BOTS_KAAPI)
+#include "kaapic.h"
+#endif
+
 struct Results {
    long hosps_number;
    long hosps_personnel;
@@ -58,7 +62,11 @@ struct Hosp {
    struct Patient *assess;
    struct Patient *inside;
    struct Patient *realloc;
+#if defined(BOTS_KAAPI)
+  kaapi_lock_t realloc_lock;
+#else
    omp_lock_t  realloc_lock;
+#endif
 };
 struct Village {
    int id;

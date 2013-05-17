@@ -40,6 +40,10 @@
 #include "bots.h"
 #include "health.h"
 
+#if defined(BOTS_KAAPI)
+#include "kaapic.h"
+#endif
+
 /* global variables */
 int sim_level;
 int sim_cities;
@@ -162,7 +166,11 @@ void allocate_village( struct Village **capital, struct Village *back,
       (*capital)->hosp.waiting = NULL;
       (*capital)->hosp.inside = NULL;
       (*capital)->hosp.realloc = NULL;
+#if defined(BOTS_KAAPI)
+     kaapi_atomic_initlock(&(*capital)->hosp.realloc_lock);
+#else
       omp_init_lock(&(*capital)->hosp.realloc_lock);
+#endif
       // Create Cities (lower level)
       inext = NULL;
       for (i = sim_cities; i>0; i--)
@@ -307,10 +315,18 @@ void check_patients_assess_par(struct Village *village)
             {
                village->hosp.free_personnel++;
                removeList(&(village->hosp.assess), p);
-               omp_set_lock(&(village->hosp.realloc_lock));
-               addList(&(village->back->hosp.realloc), p); 
+#if defined(BOTS_KAAPI)
+              kaapi_atomic_lock(&(village->hosp.realloc_lock));
+#else
+              omp_set_lock(&(village->hosp.realloc_lock));
+#endif
+               addList(&(village->back->hosp.realloc), p);
+#if defined(BOTS_KAAPI)
+              kaapi_atomic_unlock(&(village->hosp.realloc_lock));
+#else
                omp_unset_lock(&(village->hosp.realloc_lock));
-            } 
+#endif
+            }
          }
          else /* move to village */
          {
@@ -501,8 +517,15 @@ void sim_village_par(struct Village *village)
    vlist = village->forward;
    while(vlist)
    {
+#if defined(BOTS_KAAPI)
+     kaapic_spawn(0,
+                  1, sim_village_par,
+                  KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, vlist
+                  );
+#else
 #pragma omp task untied
       sim_village_par(vlist);
+#endif
       vlist = vlist->next;
    }
 
@@ -515,7 +538,11 @@ void sim_village_par(struct Village *village)
    /* Uses lists v->hosp->waiting, and v->hosp->assess */
    check_patients_waiting(village);
 
+#if defined(BOTS_KAAPI)
+  kaapic_sync();
+#else
 #pragma omp taskwait
+#endif
 
    /* Uses lists v->hosp->realloc, v->hosp->asses and v->hosp->waiting */
    check_patients_realloc(village);
@@ -558,11 +585,11 @@ void read_input_data(char *filename)
       bots_message("Could not open sequence file (%s)\n", filename);
       exit (-1);
    }
-   res = fscanf(fin,"%d %d %d %d %d %d %ld %f %f %f %d %d %d %d %d %d %d %d %f", 
+   res = fscanf(fin,"%d %d %d %d %d %d %d %f %f %f %d %d %d %d %d %d %d %d %f", 
              &sim_level,
              &sim_cities,
              &sim_population_ratio,
-             &sim_time, 
+             &sim_time,
              &sim_assess_time,
              &sim_convalescence_time,
              &sim_seed, 
@@ -632,9 +659,37 @@ int check_village(struct Village *top)
 void sim_village_main_par(struct Village *top)
 {
    long i;
+  
+#if defined(BOTS_KAAPI)
+  kaapic_begin_parallel( KAAPIC_FLAG_DEFAULT );
+ for (i = 0; i < sim_time; i++)
+ {
+    kaapic_spawn(0,
+                 1, sim_village_par,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, top
+                 );
+    kaapic_sync();   
+ }
+  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );  
+#else
 #pragma omp parallel
 #pragma omp single
 #pragma omp task untied
-   for (i = 0; i < sim_time; i++) sim_village_par(top);   
+   for (i = 0; i < sim_time; i++) sim_village_par(top);
+#endif
+}
+
+void sim_village_par_init(void)
+{
+#if defined(BOTS_KAAPI)
+  kaapic_init( 0 );
+#endif
+}
+
+void sim_village_par_fini(void)
+{
+#if defined(BOTS_KAAPI)
+  kaapic_finalize();
+#endif
 }
 
