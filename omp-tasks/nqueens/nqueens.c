@@ -29,8 +29,9 @@
 #include <stdio.h>
 #include <memory.h>
 #include <alloca.h>
-#include "bots.h"
+
 #include "app-desc.h"
+#include "bots.h"
 #include <omp.h>
 
 
@@ -403,3 +404,8 @@ int verify_queens (int size)
 	if ( total_count == solutions[size-1]) return BOTS_RESULT_SUCCESSFUL;
 	return BOTS_RESULT_UNSUCCESSFUL;
 }
+
+void init_queens()
+{
+}
+

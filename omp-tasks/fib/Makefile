@@ -23,7 +23,7 @@
 
 CUTOFF_VERSIONS = manual if_clause final 
 TIED_VERSIONS = yes
-OMPSS_VERSIONS= yes
+#OMPSS_VERSIONS= yes
 
 BASE_DIR = ../../
 
