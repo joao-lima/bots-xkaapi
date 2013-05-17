@@ -59,7 +59,7 @@ void compute_w_coefficients(int n, int a, int b, COMPLEX * W)
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 4, compute_w_coefficients,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, n,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
@@ -71,7 +71,7 @@ void compute_w_coefficients(int n, int a, int b, COMPLEX * W)
 	  compute_w_coefficients(n, a, ab, W);
 #endif
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 4, compute_w_coefficients,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, n,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab + 1,
@@ -83,7 +83,7 @@ void compute_w_coefficients(int n, int a, int b, COMPLEX * W)
 	  compute_w_coefficients(n, ab + 1, b, W);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -161,7 +161,7 @@ void unshuffle(int a, int b, COMPLEX * in, COMPLEX * out, int r, int m)
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 6, unshuffle,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -175,7 +175,7 @@ void unshuffle(int a, int b, COMPLEX * in, COMPLEX * out, int r, int m)
 	  unshuffle(a, ab, in, out, r, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 6, unshuffle,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -189,7 +189,7 @@ void unshuffle(int a, int b, COMPLEX * in, COMPLEX * out, int r, int m)
 	  unshuffle(ab, b, in, out, r, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -260,7 +260,7 @@ void fft_twiddle_gen1(COMPLEX * in, COMPLEX * out,
 void fft_twiddle_gen(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W, int nW, int nWdn, int r, int m)
 {
   if (i == i1 - 1) {
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_gen1,
                  KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, in+i,
                  KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, out+i,
@@ -278,7 +278,7 @@ void fft_twiddle_gen(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W, in
 #endif
   } else {
 	  int i2 = (i + i1) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 9, fft_twiddle_gen,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i2,
@@ -296,7 +296,7 @@ void fft_twiddle_gen(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W, in
                     nWdn, r, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 9, fft_twiddle_gen,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i2,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i1,
@@ -315,7 +315,7 @@ void fft_twiddle_gen(int i, int i1, COMPLEX * in, COMPLEX * out, COMPLEX * W, in
 #endif
   }
   
-#if 0
+#if defined(BOTS_KAAPI)
   kaapic_sync();
 #else
 #pragma omp taskwait
@@ -379,7 +379,7 @@ void fft_twiddle_2(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_2,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -395,7 +395,7 @@ void fft_twiddle_2(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_2(a, ab, in, out, W, nW, nWdn, m);
 #endif
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_2,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -411,7 +411,7 @@ void fft_twiddle_2(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_2(ab, b, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -467,7 +467,7 @@ void fft_unshuffle_2(int a, int b, COMPLEX * in, COMPLEX * out, int m)
   } else {
 	  int ab = (a + b) / 2;
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_2,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -480,7 +480,7 @@ void fft_unshuffle_2(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_2(a, ab, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_2,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -493,7 +493,7 @@ void fft_unshuffle_2(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_2(ab, b, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -620,7 +620,7 @@ void fft_twiddle_4(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_4,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -636,7 +636,7 @@ void fft_twiddle_4(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_4(a, ab, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_4,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -652,7 +652,7 @@ void fft_twiddle_4(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_4(ab, b, in, out, W, nW, nWdn, m);
 #endif
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -745,7 +745,7 @@ void fft_unshuffle_4(int a, int b, COMPLEX * in, COMPLEX * out, int m)
   } else {
 	  int ab = (a + b) / 2;
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_4,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -758,7 +758,7 @@ void fft_unshuffle_4(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_4(a, ab, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_4,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -771,7 +771,7 @@ void fft_unshuffle_4(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_4(ab, b, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -1059,7 +1059,7 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_8,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -1075,7 +1075,7 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_8(a, ab, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_8,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -1091,7 +1091,7 @@ void fft_twiddle_8(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int n
 	  fft_twiddle_8(ab, b, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -1275,7 +1275,7 @@ void fft_unshuffle_8(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  }
   } else {
 	  int ab = (a + b) / 2;
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_8,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -1288,7 +1288,7 @@ void fft_unshuffle_8(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_8(a, ab, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_8,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -1301,7 +1301,7 @@ void fft_unshuffle_8(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_8(ab, b, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -1964,7 +1964,7 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
   } else {
 	  int ab = (a + b) / 2;
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_16,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -1980,7 +1980,7 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 	  fft_twiddle_16(a, ab, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_16,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -1996,7 +1996,7 @@ void fft_twiddle_16(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 	  fft_twiddle_16(ab, b, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -2397,7 +2397,7 @@ void fft_unshuffle_16(int a, int b, COMPLEX * in, COMPLEX * out, int m)
   } else {
 	  int ab = (a + b) / 2;
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_16,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -2410,7 +2410,7 @@ void fft_unshuffle_16(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_16(a, ab, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_16,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -2423,7 +2423,7 @@ void fft_unshuffle_16(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_16(ab, b, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -3966,7 +3966,7 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
   } else {
 	  int ab = (a + b) / 2;
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_32,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -3982,7 +3982,7 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 	  fft_twiddle_32(a, ab, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 8, fft_twiddle_32,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -3998,7 +3998,7 @@ void fft_twiddle_32(int a, int b, COMPLEX * in, COMPLEX * out, COMPLEX * W, int 
 	  fft_twiddle_32(ab, b, in, out, W, nW, nWdn, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
@@ -4895,7 +4895,7 @@ void fft_unshuffle_32(int a, int b, COMPLEX * in, COMPLEX * out, int m)
   } else {
 	  int ab = (a + b) / 2;
 
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_32,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, a,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
@@ -4908,7 +4908,7 @@ void fft_unshuffle_32(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_32(a, ab, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_spawn(0, 5, fft_unshuffle_32,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, ab,
                  KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, b,
@@ -4921,7 +4921,7 @@ void fft_unshuffle_32(int a, int b, COMPLEX * in, COMPLEX * out, int m)
 	  fft_unshuffle_32(ab, b, in, out, m);
 #endif
     
-#if 0
+#if defined(BOTS_KAAPI)
     kaapic_sync();
 #else
 #pragma omp taskwait
