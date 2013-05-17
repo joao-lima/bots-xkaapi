@@ -2,10 +2,59 @@
 
 export LD_LIBRARY_PATH=$HOME/install/xkaapi/default/lib:$LD_LIBRARY_PATH
 
+function xkaapi_run_sort {
+    # test case for Bugio
+#    export KAAPI_CPUSET="0:3"
+#    export KAAPI_GPUSET="0~7"
+    export KAAPI_CPUCOUNT=8
+
+#    export KAAPI_CPUSET="0,5,6,11"
+#    export KAAPI_GPUSET="0~1,1~2,2~3,3~4,4~7,5~8,6~9,7~10"
+
+#    produce xkaapi traces
+#    export KAAPI_RECORD_TRACE=1
+#    export KAAPI_RECORD_MASK="COMPUTE,IDLE"
+
+#     output a task graph
+#    export KAAPI_DUMP_GRAPH=1
+#    export KAAPI_DOT_NOVERSION_LINK=1
+#    export KAAPI_DOT_NODATA_LINK=1
+#    export KAAPI_DOT_NOLABEL_INFO=1
+#    export KAAPI_DOT_NOACTIVATION_LINK=1
+#    export KAAPI_DOT_NOLABEL=1
+
+#    Display performance counters 
+#    export KAAPI_DISPLAY_PERF=1
+
+#    export KAAPI_PUSH_AFFINITY="writer"
+#    export KAAPI_PUSH_AFFINITY="heft"
+#    export KAAPI_STEAL_AFFINITY="writer"
+#    export KAAPI_PUSH_AFFINITY="locality"
+#    export KAAPI_STEAL_AFFINITY="locality"
+
+    execfile="./sort.gcc.kaapi"
+
+    export KAAPI_CUDA_WINDOW_SIZE=2
+
+    local nsizes="$1"
+#    local nblocks="$2"
+
+    for size in $nsizes
+    do
+#      for nb in $nblocks
+#      do
+	echo "KAAPI_STACKSIZE_MASTER=536870912 $execfile -n $size -c"
+	KAAPI_STACKSIZE_MASTER=536870912 $execfile -n $size -c
+#	KAAPI_STACKSIZE_MASTER=536870912 gdb $execfile
+#      done
+    done
+}
+
 function xkaapi_run_test {
     # test case for Bugio
-    export KAAPI_CPUSET="0:6"
-    export KAAPI_GPUSET="0~7"
+#    export KAAPI_CPUSET="0:6"
+#    export KAAPI_GPUSET="0~7"
+    export KAAPI_CPUCOUNT=8
 
 #    export KAAPI_CPUSET="0,5,6,11"
 #    export KAAPI_GPUSET="0~1,1~2,2~3,3~4,4~7,5~8,6~9,7~10"
@@ -33,7 +82,8 @@ function xkaapi_run_test {
 
 
 #    execfile="./strassen.gcc.kaapi"
-    execfile="./sparselu.gcc.kaapi"
+#    execfile="./sparselu.gcc.kaapi"
+    execfile="./sort.gcc.kaapi"
 
     export KAAPI_CUDA_WINDOW_SIZE=2
 
@@ -67,13 +117,30 @@ function omp_run_test {
     done
 }
 
-nsizes="64 128"
+function omp_run_sort {
+    execfile="./sort.gcc.omp-tasks"
+
+    export OMP_NUM_THREADS=8
+
+    local nsizes="$1"
+
+    for size in $nsizes
+    do
+      $execfile -n $size -c
+    done
+}
+
+nsizes="128"
 nblocks="32"
 
 # XKaapi benchmark
-xkaapi_run_test "$nsizes" "$nblocks"
+#xkaapi_run_test "$nsizes" "$nblocks"
+
+nsize="2000000"
+xkaapi_run_sort "$nsize"
+#omp_run_sort "$nsize" 
 
 # OpenMP benchmark
-omp_run_test "$nsizes" "$nblocks"
+#omp_run_test "$nsizes" "$nblocks"
 
 exit 0

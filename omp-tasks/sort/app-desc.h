@@ -53,14 +53,18 @@ void scramble_array( ELM *array );
 void fill_array( ELM *array ); 
 void sort ( void ); 
 
+void sort_init_par(void);
 void sort_par (void);
+void sort_fini_par(void);
 void sort_init (void);
 int sort_verify (void);
 
 #define BOTS_APP_INIT sort_init()
 
-#define KERNEL_INIT
+//#define KERNEL_INIT
+#define KERNEL_INIT sort_init_par()
 #define KERNEL_CALL sort_par()
+#define KERNEL_FINI sort_fini_par()
 #define KERNEL_CHECK sort_verify()
 
 

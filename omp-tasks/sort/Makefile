@@ -21,7 +21,8 @@
 #LIBS = 
 #PROGRAM_OBJS=
 
-TIED_VERSIONS = yes
+#TIED_VERSIONS = yes
+KAAPI_VERSIONS = yes
 
 BASE_DIR = ../../
 
