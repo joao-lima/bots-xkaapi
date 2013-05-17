@@ -23,6 +23,7 @@ PROGRAM_OBJS=uts.o brg_sha1.o
 
 #CUTOFF_VERSIONS = manual if_clause
 TIED_VERSIONS = YES
+KAAPI_VERSIONS = yes
 
 BASE_DIR = ../../
 

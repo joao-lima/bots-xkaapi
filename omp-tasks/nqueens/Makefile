@@ -18,7 +18,7 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA            #
 ##############################################################################################
 
-#LIBS = 
+LIBS = -lm
 #PROGRAM_OBJS=
 
 #CUTOFF_VERSIONS = manual if_clause final 

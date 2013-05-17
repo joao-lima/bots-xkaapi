@@ -60,7 +60,11 @@ extern int    verbose;
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
+#if defined(BOTS_KAAPI)
+void parTreeSearch(int depth, Node *parent, int numChildren, int* numNodes);
+#else
 unsigned long long parTreeSearch(int depth, Node *parent, int numChildren);
+#endif
 
 int    uts_paramsToStr(char *strBuf, int ind);
 void   uts_read_file(char *file);

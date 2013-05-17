@@ -68,6 +68,10 @@
 #include "bots.h"
 #include "uts.h"
 
+#if defined(BOTS_KAAPI)
+#include "kaapic.h"
+#endif
+
 /***********************************************************
  *  Global state                                           *
  ***********************************************************/
@@ -126,6 +130,10 @@ void uts_initRoot(Node * root)
    root->numChildren = -1;      // means not yet determined
    rng_init(root->state.state, rootId);
 
+#if defined(BOTS_KAAPI)
+  kaapic_init( 0 );
+#endif
+
    bots_message("Root node at %p\n", root);
 }
 
@@ -174,20 +182,43 @@ unsigned long long parallel_uts ( Node *root )
 {
    unsigned long long num_nodes = 0 ;
    root->numChildren = uts_numChildren(root);
+  
+#if defined(BOTS_KAAPI)
+  kaapic_begin_parallel( KAAPIC_FLAG_DEFAULT );
+#endif  
 
    bots_message("Computing Unbalance Tree Search algorithm ");
 
-   #pragma omp parallel  
+#if defined(BOTS_KAAPI)
+  kaapic_spawn(0,
+               4, parTreeSearch,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 0,
+               KAAPIC_MODE_R, KAAPIC_TYPE_PTR, 1, root,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, root->numChildren,
+               KAAPIC_MODE_W, KAAPIC_TYPE_PTR, 1, &num_nodes
+               );
+  kaapic_sync();
+#else
+   #pragma omp parallel
       #pragma omp single nowait
       #pragma omp task untied
         num_nodes = parTreeSearch( 0, root, root->numChildren );
+#endif
+
+#if defined(BOTS_KAAPI)
+  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );
+#endif
 
    bots_message(" completed!");
 
    return num_nodes;
 }
 
-unsigned long long parTreeSearch(int depth, Node *parent, int numChildren) 
+#if defined(BOTS_KAAPI)
+void parTreeSearch(int depth, Node *parent, int numChildren, int* numNodes)
+#else
+unsigned long long parTreeSearch(int depth, Node *parent, int numChildren)
+#endif
 {
   Node n[numChildren], *nodePtr;
   int i, j;
@@ -205,18 +236,36 @@ unsigned long long parTreeSearch(int depth, Node *parent, int numChildren)
      }
 
      nodePtr->numChildren = uts_numChildren(nodePtr);
-
+    
+#if defined(BOTS_KAAPI)
+    kaapic_spawn(0,
+                 4, parTreeSearch,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, depth+1,
+                 KAAPIC_MODE_R, KAAPIC_TYPE_PTR, 1, nodePtr,
+                 KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nodePtr->numChildren,
+                 KAAPIC_MODE_W, KAAPIC_TYPE_PTR, 1, &partialCount[i]
+                 );
+#else
      #pragma omp task untied firstprivate(i, nodePtr) shared(partialCount)
         partialCount[i] = parTreeSearch(depth+1, nodePtr, nodePtr->numChildren);
+#endif
   }
 
+#if defined(BOTS_KAAPI)
+  kaapic_sync();
+#else
   #pragma omp taskwait
+#endif
 
   for (i = 0; i < numChildren; i++) {
      subtreesize += partialCount[i];
   }
-  
+
+#if defined(BOTS_KAAPI)
+  *numNodes = subtreesize;
+#else
   return subtreesize;
+#endif
 }
 
 void uts_read_file ( char *filename )
@@ -257,6 +306,10 @@ void uts_show_stats( void )
 {
    int nPes = atoi(bots_resources);
    int chunkSize = 0;
+  
+#if defined(BOTS_KAAPI)
+  kaapic_finalize( );
+#endif
 
    bots_message("\n");
    bots_message("Tree size                            = %llu\n", (unsigned long long)  bots_number_of_tasks );
