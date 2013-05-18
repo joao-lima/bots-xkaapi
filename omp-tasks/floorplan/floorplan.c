@@ -597,15 +597,19 @@ static void add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int
 //#pragma omp task untied private(board, footprint,area) \
 //firstprivate(NWS,i,j,id,nn) \
 //shared(FOOTPRINT,BOARD,CELLS,MIN_AREA,MIN_FOOTPRINT,N,BEST_BOARD,nnc,bots_verbose_mode)
-      add_cell_task(NWS, i, j, id, nn, FOOTPRINT, BOARD, CELLS, &nnc );
-//      kaapic_spawn(0,
-//                   5, add_cell,
-//                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 1,
-//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, footprint,
-//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, board,
-//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, gcells,
-//                   KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
-//                   );
+//      add_cell_task(NWS, i, j, id, nn, FOOTPRINT, BOARD, CELLS, &nnc );
+      kaapic_spawn(0,
+                   9, add_cell_task,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, NWS,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, i,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, j,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, id,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, nn,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, FOOTPRINT,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, BOARD,
+                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, CELLS,
+                   KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
+                   );
     }
   }
   
