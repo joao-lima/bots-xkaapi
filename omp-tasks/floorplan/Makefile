@@ -23,6 +23,7 @@
 
 #CUTOFF_VERSIONS = manual if_clause final 
 TIED_VERSIONS = yes
+KAAPI_VERSIONS = yes
 
 BASE_DIR = ../../
 
