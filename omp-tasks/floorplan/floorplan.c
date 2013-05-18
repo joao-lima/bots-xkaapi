@@ -26,6 +26,10 @@
 #include "app-desc.h"
 #include "bots.h"
 
+#if defined(BOTS_KAAPI)
+#include "kaapic.h"
+#endif
+
 #define ROWS 64
 #define COLS 64
 #define DMAX 64
@@ -512,6 +516,105 @@ return nnc+nnl;
 
 #else
 
+#if defined(BOTS_KAAPI)
+
+static kaapi_lock_t kaapi_lock;
+
+static void add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int *ntasks);
+
+void add_cell_task(coor* NWS, int i, int j, int id, int nn, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int* nnc )
+{
+  ibrd board;
+  coor footprint;
+  int area;
+  
+  struct cell cells[N+1];
+  memcpy(cells,CELLS,sizeof(struct cell)*(N+1));
+  /* extent of shape */
+  cells[id].top = NWS[j][0];
+  cells[id].bot = cells[id].top + cells[id].alt[i][0] - 1;
+  cells[id].lhs = NWS[j][1];
+  cells[id].rhs = cells[id].lhs + cells[id].alt[i][1] - 1;
+  
+  memcpy(board, BOARD, sizeof(ibrd));
+  
+  /* if the cell cannot be layed down, prune search */
+  if (! lay_down(id, board, cells)) {
+    bots_debug("Chip %d, shape %d does not fit\n", id, i);
+    goto _end;
+  }
+  
+  /* calculate new footprint of board and area of footprint */
+  footprint[0] = max(FOOTPRINT[0], cells[id].bot+1);
+  footprint[1] = max(FOOTPRINT[1], cells[id].rhs+1);
+  area         = footprint[0] * footprint[1];
+  
+  /* if last cell */
+  if (cells[id].next == 0) {
+    
+    /* if area is minimum, update global values */
+    if (area < MIN_AREA) {
+      kaapi_atomic_lock(&kaapi_lock);
+//#pragma omp critical
+      if (area < MIN_AREA) {
+        MIN_AREA         = area;
+        MIN_FOOTPRINT[0] = footprint[0];
+        MIN_FOOTPRINT[1] = footprint[1];
+        memcpy(BEST_BOARD, board, sizeof(ibrd));
+        bots_debug("N  %d\n", MIN_AREA);
+      }
+      kaapi_atomic_unlock(&kaapi_lock);
+    }
+    
+    /* if area is less than best area */
+  } else if (area < MIN_AREA) {
+//#pragma omp atomic
+    add_cell(cells[id].next, footprint, board,cells, nnc);
+    /* if area is greater than or equal to best area, prune search */
+  } else {
+    
+    bots_debug("T  %d, %d\n", area, MIN_AREA);
+    
+  }
+_end:;
+}
+
+static void add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int *ntasks)
+{
+  int  i, j, nn, nnc,nnl;
+  
+  coor NWS[DMAX];
+  
+  nnc = nnl = 0;
+  
+  /* for each possible shape */
+  for (i = 0; i < CELLS[id].n; i++) {
+    /* compute all possible locations for nw corner */
+    nn = starts(id, i, NWS, CELLS);
+    nnl += nn;
+    /* for all possible locations */
+    for (j = 0; j < nn; j++) {
+//#pragma omp task untied private(board, footprint,area) \
+//firstprivate(NWS,i,j,id,nn) \
+//shared(FOOTPRINT,BOARD,CELLS,MIN_AREA,MIN_FOOTPRINT,N,BEST_BOARD,nnc,bots_verbose_mode)
+      add_cell_task(NWS, i, j, id, nn, FOOTPRINT, BOARD, CELLS, &nnc );
+//      kaapic_spawn(0,
+//                   5, add_cell,
+//                   KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 1,
+//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, footprint,
+//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, board,
+//                   KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, gcells,
+//                   KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
+//                   );
+    }
+  }
+  
+  kaapic_sync();
+  
+  *ntasks +=  nnc+nnl;
+}
+
+#else /* BOTS_KAAPI */
 static int add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS) {
   int  i, j, nn, area, nnc,nnl;
 
@@ -584,6 +687,7 @@ _end:;
 #pragma omp taskwait
 return nnc+nnl;
 }
+#endif /* BOTS_KAAPI */
 
 #endif
 
@@ -607,7 +711,10 @@ void floorplan_init (char *filename)
     /* initialize board is empty */
     for (i = 0; i < ROWS; i++)
     for (j = 0; j < COLS; j++) board[i][j] = 0;
-    
+  
+#if defined(BOTS_KAAPI)
+  kaapic_init(0);
+#endif
 }
 
 void compute_floorplan (void)
@@ -617,6 +724,25 @@ void compute_floorplan (void)
     footprint[0] = 0;
     footprint[1] = 0;
     bots_message("Computing floorplan ");
+  
+#if defined(BOTS_KAAPI)
+  int ntasks = 0;
+  kaapic_begin_parallel( KAAPIC_FLAG_DEFAULT );
+  kaapi_atomic_initlock(&kaapi_lock);
+  kaapic_spawn(0,
+               5, add_cell,
+               KAAPIC_MODE_V, KAAPIC_TYPE_INT, 1, 1,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, footprint,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, board,
+               KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, gcells,
+               KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
+               );
+  kaapic_sync();
+  kaapi_atomic_destroy(&kaapi_lock);
+  kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );
+  
+  bots_number_of_tasks = ntasks;
+#else
 #pragma omp parallel
 {
 #pragma omp single
@@ -626,12 +752,16 @@ void compute_floorplan (void)
        bots_number_of_tasks = add_cell(1, footprint, board, gcells);
 #endif
 }
+#endif
     bots_message(" completed!\n");
 
 }
 
 void floorplan_end (void)
 {
+#if defined(BOTS_KAAPI)
+  kaapic_finalize();
+#endif
     /* write results */
     write_outputs();
 }
