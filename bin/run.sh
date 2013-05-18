@@ -43,9 +43,9 @@ function xkaapi_run_sort {
     do
 #      for nb in $nblocks
 #      do
-	echo "KAAPI_STACKSIZE_MASTER=536870912 $execfile -n $size -c"
-	KAAPI_STACKSIZE_MASTER=536870912 $execfile -n $size -c
-#	KAAPI_STACKSIZE_MASTER=536870912 gdb $execfile
+	echo "KAAPI_STACKSIZE=536870912 $execfile -n $size -c"
+	KAAPI_STACKSIZE=536870912 $execfile -n $size -c
+#	KAAPI_STACKSIZE=536870912 gdb $execfile
 #      done
     done
 }
@@ -81,9 +81,7 @@ function xkaapi_run_test {
 #    export KAAPI_STEAL_AFFINITY="locality"
 
 
-#    execfile="./strassen.gcc.kaapi"
-#    execfile="./sparselu.gcc.kaapi"
-    execfile="./sort.gcc.kaapi"
+    execfile="./sparselu.gcc.kaapi"
 
     export KAAPI_CUDA_WINDOW_SIZE=2
 

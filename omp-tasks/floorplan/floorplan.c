@@ -555,7 +555,6 @@ void add_cell_task(coor* NWS, int i, int j, int id, int nn, coor FOOTPRINT, ibrd
     /* if area is minimum, update global values */
     if (area < MIN_AREA) {
       kaapi_atomic_lock(&kaapi_lock);
-//#pragma omp critical
       if (area < MIN_AREA) {
         MIN_AREA         = area;
         MIN_FOOTPRINT[0] = footprint[0];
@@ -568,7 +567,6 @@ void add_cell_task(coor* NWS, int i, int j, int id, int nn, coor FOOTPRINT, ibrd
     
     /* if area is less than best area */
   } else if (area < MIN_AREA) {
-//#pragma omp atomic
     add_cell(cells[id].next, footprint, board,cells, nnc);
     /* if area is greater than or equal to best area, prune search */
   } else {
@@ -594,10 +592,6 @@ static void add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int
     nnl += nn;
     /* for all possible locations */
     for (j = 0; j < nn; j++) {
-//#pragma omp task untied private(board, footprint,area) \
-//firstprivate(NWS,i,j,id,nn) \
-//shared(FOOTPRINT,BOARD,CELLS,MIN_AREA,MIN_FOOTPRINT,N,BEST_BOARD,nnc,bots_verbose_mode)
-//      add_cell_task(NWS, i, j, id, nn, FOOTPRINT, BOARD, CELLS, &nnc );
       kaapic_spawn(0,
                    9, add_cell_task,
                    KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, NWS,
@@ -608,7 +602,7 @@ static void add_cell(int id, coor FOOTPRINT, ibrd BOARD, struct cell *CELLS, int
                    KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, FOOTPRINT,
                    KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, BOARD,
                    KAAPIC_MODE_V, KAAPIC_TYPE_PTR, 1, CELLS,
-                   KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
+                   KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &nnc
                    );
     }
   }
