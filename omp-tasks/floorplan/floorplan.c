@@ -738,7 +738,7 @@ void compute_floorplan (void)
                KAAPIC_MODE_CW, KAAPIC_REDOP_PLUS, KAAPIC_TYPE_INT, 1, &ntasks
                );
   kaapic_sync();
-  kaapi_atomic_destroy(&kaapi_lock);
+  kaapi_atomic_destroylock(&kaapi_lock);
   kaapic_end_parallel( KAAPIC_FLAG_DEFAULT );
   
   bots_number_of_tasks = ntasks;
